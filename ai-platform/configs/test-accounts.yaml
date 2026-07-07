@@ -1,0 +1,22 @@
+# =============================================================================
+# 开发/测试账号（仅 DEV_TEST_ACCOUNTS_ENABLED=true 时生效）
+# =============================================================================
+# 密码为明文，仅限本地开发；生产环境务必关闭 DEV_TEST_ACCOUNTS_ENABLED。
+# JWT_SECRET_KEY 须与 Gateway 的 JWT_SECRET 一致，否则 WebSocket 鉴权会失败。
+
+accounts:
+  - username: test
+    password: test123
+    user_id: u-test-001
+    display_name: 测试用户
+    department: dev
+    roles: [user]
+    channel: web
+
+  - username: crm_tester
+    password: crm123
+    user_id: u-crm-test
+    display_name: CRM 测试员
+    department: crm
+    roles: [user, crm:member:read]
+    channel: web

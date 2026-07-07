@@ -1,0 +1,22 @@
+# =============================================================================
+# configs/skills/registry.yaml — 全局 Skill 注册索引
+# =============================================================================
+
+version: "1.0.0"
+
+skills:
+  - id: member.profile
+    category: crm
+    package: crm/member-profile
+    name: 会员档案查询
+    status: active
+  - id: member.points-account
+    category: crm
+    package: crm/member-points-account
+    name: 会员积分账户查询
+    status: active
+  - id: member.coupons-account
+    category: crm
+    package: crm/member-coupon-account
+    name: 会员券账户与流水查询
+    status: active

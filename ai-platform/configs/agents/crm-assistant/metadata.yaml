@@ -1,0 +1,27 @@
+# =============================================================================
+# crm-assistant — AgentRouter 元数据（供语义检索与路由匹配）
+# =============================================================================
+
+metadata:
+  name: crm-assistant
+  display_name: CRM 智能助手
+  description: >
+    企业 CRM 领域的智能助手，帮助业务人员查询会员信息、积分与等级、
+    管理客户标签、查看客户画像与营销活动，并分析客户旅程。
+  version: "1.0.0"
+  enabled: true
+  tags:
+    - crm
+    - 会员管理
+    - 客户运营
+    - 积分
+    - 营销
+  capabilities:
+    - query_member
+    - query_member_points
+    - adjust_member_points
+    - query_member_tier
+    - update_member_tags
+    - query_member_profile
+    - query_marketing_campaigns
+    - query_customer_journey

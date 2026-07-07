@@ -1,0 +1,15 @@
+# =============================================================================
+# crm-assistant — 启用的 Skills
+# =============================================================================
+
+skills:
+  enabled:
+    - skill_id: member.profile
+      enabled: true
+    - skill_id: member.points-account
+      enabled: true
+    - skill_id: member.coupons-account
+      enabled: true
+
+  custom_skills_dir: skills/custom-skills/
+  overrides_dir: skills/skill-overrides/

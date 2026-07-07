@@ -1,0 +1,253 @@
+# =============================================================================
+# AI Platform — Development Environment Docker Compose
+# =============================================================================
+# Services:
+#   - postgres     : PostgreSQL 16 (relational database)
+#   - redis        : Redis 7.2 (cache + message queue + session state)
+#   - qdrant       : Qdrant 1.9 (vector database)
+#   - embedding    : bge-small-zh-v1.5 local embedding model service
+#   - outbound-proxy: Squid outbound proxy (LLM API access whitelist)
+#   - gateway      : Message Gateway (TypeScript/Fastify)
+#   - backend      : Agent Core (Python/FastAPI)
+#   - frontend     : H5 Frontend (React/Vite)
+#   - nginx        : Reverse proxy (static + API + WebSocket)
+# =============================================================================
+
+version: "3.9"
+
+services:
+  # ===== PostgreSQL 16 =====
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-platform-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aiplatform
+      POSTGRES_PASSWORD: aiplatform_dev_password
+      POSTGRES_DB: ai_platform
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiplatform -d ai_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-platform-net
+
+  # ===== Redis 7.2 =====
+  redis:
+    image: redis:7.2-alpine
+    container_name: ai-platform-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-platform-net
+
+  # ===== Qdrant 1.9 =====
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    container_name: ai-platform-qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+      QDRANT__SERVICE__HTTP_PORT: "6333"
+      QDRANT__LOG_LEVEL: "INFO"
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - ./init-qdrant.sh:/qdrant/init-qdrant.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-platform-net
+
+  # ===== Local Embedding Model (bge-small-zh-v1.5) =====
+  embedding:
+    build:
+      context: .
+      dockerfile: Dockerfile.embedding
+    container_name: ai-platform-embedding
+    restart: unless-stopped
+    environment:
+      MODEL_NAME: "BAAI/bge-small-zh-v1.5"
+      PORT: 8001
+      MAX_BATCH_SIZE: 32
+    ports:
+      - "8001:8001"
+    volumes:
+      - embedding_models:/app/models
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ai-platform-net
+
+  # ===== Outbound Proxy (Squid) =====
+  outbound-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.outbound-proxy
+    container_name: ai-platform-outbound-proxy
+    restart: unless-stopped
+    ports:
+      - "3128:3128"
+    volumes:
+      - ./outbound-proxy/squid.conf:/etc/squid/squid.conf:ro
+      - outbound_proxy_logs:/var/log/squid
+    networks:
+      - ai-platform-net
+
+  # ===== Message Gateway (TypeScript/Fastify) =====
+  gateway:
+    build:
+      context: ../gateway
+      dockerfile: ../infra/Dockerfile.gateway
+    container_name: ai-platform-gateway
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3100
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      BACKEND_URL: http://backend:8000
+      LOG_LEVEL: debug
+    ports:
+      - "3100:3100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - ../gateway/src:/app/src
+    networks:
+      - ai-platform-net
+
+  # ===== Agent Core Backend (Python/FastAPI) =====
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../infra/Dockerfile.backend
+    container_name: ai-platform-backend
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "true"
+      HOST: "0.0.0.0"
+      PORT: 8000
+      LOG_LEVEL: DEBUG
+      LOG_FORMAT: json
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: aiplatform
+      POSTGRES_PASSWORD: aiplatform_dev_password
+      POSTGRES_DB: ai_platform
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      EMBEDDING_SERVICE_URL: http://embedding:8001
+      OUTBOUND_PROXY_HOST: outbound-proxy
+      OUTBOUND_PROXY_PORT: 3128
+      GATEWAY_HOST: gateway
+      GATEWAY_PORT: 3100
+      CONFIG_BASE_PATH: /app/configs
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      embedding:
+        condition: service_healthy
+    volumes:
+      - ../backend/src:/app/src
+      - ../configs:/app/configs:ro
+    networks:
+      - ai-platform-net
+
+  # ===== H5 Frontend (React/Vite) =====
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../infra/Dockerfile.frontend
+      target: development
+    container_name: ai-platform-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      VITE_API_BASE_URL: /api
+      VITE_WS_BASE_URL: /ws
+    ports:
+      - "3000:3000"
+    depends_on:
+      - gateway
+    volumes:
+      - ../frontend/src:/app/src
+      - ../frontend/index.html:/app/index.html
+      - ../frontend/vite.config.ts:/app/vite.config.ts
+    networks:
+      - ai-platform-net
+
+  # ===== Nginx Reverse Proxy =====
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: ai-platform-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - gateway
+      - backend
+    networks:
+      - ai-platform-net
+
+# ===== Named Volumes =====
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  embedding_models:
+    driver: local
+  outbound_proxy_logs:
+    driver: local
+
+# ===== Networks =====
+networks:
+  ai-platform-net:
+    driver: bridge

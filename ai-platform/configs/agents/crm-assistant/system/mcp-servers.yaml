@@ -1,0 +1,15 @@
+# =============================================================================
+# crm-assistant — MCP Server 连接配置
+# =============================================================================
+# CRM 业务系统通过 MCP 暴露会员、积分、标签等工具。
+# 本地开发时将 endpoint 改为实际 CRM 服务地址。
+# =============================================================================
+
+mcp_servers:
+  - name: mcp-api-suite
+    transport: streamable_http
+    endpoint: "http://localhost:3333/mcp"
+    enabled: true
+    description: mcp-api-suite
+    timeout: 30
+    auto_connect: false

@@ -1,0 +1,16 @@
+# =============================================================================
+# crm-assistant — 运行时配置
+# =============================================================================
+
+runtime:
+  type: openharness
+  version: "1.0.0"
+  allowed_tools:
+    - skill
+    - mcp__mcp-api-suite__*
+  params:
+    maxSteps: 20
+    temperature: 0.5
+    maxTokens: 4096
+  prompts:
+    system: runtime/prompts/system.md

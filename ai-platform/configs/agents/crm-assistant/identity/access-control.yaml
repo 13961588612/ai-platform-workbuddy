@@ -1,0 +1,48 @@
+# =============================================================================
+# crm-assistant — 访问控制
+# =============================================================================
+
+access_control:
+  departments:
+    - 门店运营
+    - 客户服务
+    - 会员运营
+    - 市场营销
+  roles:
+    - store_staff
+    - customer_service
+    - crm_operator
+    - crm_admin
+  skill_permissions:
+    crm:member:read:
+      - store_staff
+      - customer_service
+      - crm_operator
+      - crm_admin
+    crm:points:read:
+      - store_staff
+      - customer_service
+      - crm_operator
+      - crm_admin
+    crm:points:write:
+      - crm_operator
+      - crm_admin
+    crm:tier:read:
+      - store_staff
+      - customer_service
+      - crm_operator
+      - crm_admin
+    crm:tags:write:
+      - crm_operator
+      - crm_admin
+    crm:profile:read:
+      - customer_service
+      - crm_operator
+      - crm_admin
+    crm:campaign:read:
+      - crm_operator
+      - crm_admin
+    crm:journey:read:
+      - customer_service
+      - crm_operator
+      - crm_admin

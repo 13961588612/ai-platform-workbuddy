@@ -1,0 +1,166 @@
+# =============================================================================
+# configs/system/system.yaml — 全局系统配置入口
+# =============================================================================
+# 汇总引用 LLM 网关、出站代理、企业微信 Bot 等子配置文件，
+# 并提供系统级参数（Embedding 服务、Qdrant 连接、全局开关等）。
+# =============================================================================
+
+version: "1.0.0"
+
+# ===== 子配置引用 =====
+includes:
+  llm_gateway: "llm-gateway.yaml"
+  outbound_proxy: "outbound-proxy.yaml"
+  wecom_bot: "wecom-bot.yaml"
+
+# ===== Embedding 服务 =====
+embedding:
+  service_url: "http://embedding:8001"
+  model_name: "bge-small-zh-v1.5"
+  dimension: 768
+  max_batch_size: 32
+  timeout: 30
+
+# ===== Qdrant 向量数据库 =====
+qdrant:
+  url: "http://qdrant:6333"
+  collections:
+    skills: "skills_index"
+    agent_router: "agent_router_index"
+    agent_memory: "agent_memory_index"
+  vector_size: 768
+  distance: "Cosine"
+
+# ===== LLM 网关全局配置 =====
+llm_gateway:
+  enabled: true
+
+  # 厂家配置
+  providers:
+    deepseek:
+      api_keys:
+        - { ref: "secret://deepseek-key-1" }
+        - { ref: "secret://deepseek-key-2" }
+      endpoint: "https://api.deepseek.com/v1"
+      models: ["deepseek-v4-flash"]
+      proxy: "http://outbound-proxy:3128"
+      key_rotation: "round-robin"
+      timeout: 60
+      max_retries: 3
+
+    qwen:
+      api_keys:
+        - { ref: "secret://qwen-key-1" }
+      endpoint: "https://dashscope.aliyuncs.com/api/v1"
+      models: ["qwen3.6-plus"]
+      proxy: "http://outbound-proxy:3128"
+      key_rotation: "round-robin"
+      timeout: 60
+      max_retries: 3
+
+  # 配额控制
+  cost_control:
+    default_quota:
+      per_user: 100000            # 每用户每日 Token 上限
+      per_department: 1000000     # 每部门每日 Token 上限
+    alert_threshold: 0.8          # 80% 用量告警
+    hard_limit: true              # 超限硬拒绝
+
+  # 故障切换
+  failover:
+    primary: "deepseek"
+    fallback: "qwen"
+    auto_switch: true
+    max_retries: 3
+    health_check_interval: 60     # 秒
+
+  # 出站代理
+  outbound_proxy:
+    enabled: true
+    url: "http://outbound-proxy:3128"
+    nodes:
+      - { host: "outbound-proxy", port: 3128 }
+    health_check_interval: 30     # 秒
+    allowed_domains:
+      - "api.deepseek.com"
+      - "dashscope.aliyuncs.com"
+    audit_log: true
+
+# ===== 企业微信配置 =====
+wecom:
+  # H5 渠道
+  h5:
+    corp_id: "${WECOM_CORP_ID}"
+    agent_id: "${WECOM_AGENT_ID}"
+    secret: "${WECOM_SECRET}"
+    # JS-SDK 鉴权
+    js_sdk:
+      enabled: true
+      js_api_list:
+        - "chooseImage"
+        - "previewImage"
+        - "getNetworkType"
+        - "openLocation"
+
+  # Bot 渠道（智能机器人 WebSocket 长连接）
+  bot:
+    enabled: true
+    callback_token: "${WECOM_BOT_CALLBACK_TOKEN}"
+    encoding_aes_key: "${WECOM_BOT_CALLBACK_ENCODING_AES_KEY}"
+    websocket:
+      endpoint: "wss://qyapi.weixin.qq.com/cgi-bin/wxconnect"
+      heartbeat_interval: 30      # 秒
+      reconnect_interval: 5       # 秒
+      max_reconnect_attempts: 10
+    # Bot 支持的卡片类型（6种）
+    supported_card_types:
+      - "text_notice"             # 文本通知
+      - "news_notice"             # 图文通知
+      - "button_interaction"      # 按钮交互
+      - "vote_interaction"        # 投票交互
+      - "multiple_interaction"    # 多选交互
+      - "template_notice"         # 模板通知
+
+# ===== 日志与监控 =====
+logging:
+  format: "json"                  # json | console
+  level: "INFO"
+  sensitive_fields:               # 日志中脱敏的字段
+    - "password"
+    - "token"
+    - "api_key"
+    - "secret"
+    - "aes_key"
+  mask_value: "***"
+
+# ===== 会话管理 =====
+session:
+  default_channel: "web"          # web | wecom_h5 | wecom_bot
+  session_id_prefix:
+    web: "web-"
+    wecom_h5: "wecom-h5-"
+    wecom_bot: "wecom-bot-"
+  max_concurrent_per_user: 3
+  idle_timeout: 1800              # 秒（30分钟）
+  max_history: 100                # 单会话最大消息数
+
+# ===== Agent Router =====
+agent_router:
+  enabled: true
+  strategies:
+    - name: "session_affinity"
+      enabled: true
+      priority: 1
+      ttl: 1800                   # 秒
+    - name: "keyword_match"
+      enabled: true
+      priority: 2
+    - name: "semantic_search"
+      enabled: true
+      priority: 3
+      top_k: 5
+      score_threshold: 0.7
+    - name: "default_fallback"
+      enabled: true
+      priority: 4
+      default_agent: "default-agent"

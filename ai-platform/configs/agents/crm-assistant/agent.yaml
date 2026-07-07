@@ -1,0 +1,54 @@
+# =============================================================================
+# crm-assistant — CRM 智能助手主配置
+# =============================================================================
+
+agent:
+  name: crm-assistant
+  display_name: CRM 智能助手
+  description: >
+    面向门店与客服团队的 CRM 智能助手，支持会员查询、积分管理、
+    等级标签、客户画像、营销活动与客户旅程分析。
+  version: "1.0.0"
+  tags:
+    - crm
+    - 会员
+    - 客户
+    - 积分
+    - 营销
+
+  includes:
+    runtime: runtime/runtime.yaml
+    system: system/model.yaml
+
+  routing:
+    enabled: true
+    priority: 20
+    keywords:
+      - 会员
+      - 客户
+      - CRM
+      - 积分
+      - 等级
+      - 标签
+      - 画像
+      - 营销
+      - 活动
+      - 旅程
+      - 消费记录
+
+  memory:
+    static:
+      enabled: true
+      personality: memory/personality.md
+      facts_dir: memory/facts/
+    dynamic:
+      enabled: true
+      collection: agent_memory_index
+      top_k: 5
+      write_back: true
+      ttl_days: 30
+      max_per_user: 200
+
+  push:
+    enabled: false
+    channels: []

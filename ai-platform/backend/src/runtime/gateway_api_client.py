@@ -1,0 +1,161 @@
+"""LLM Gateway 适配器，实现了 OpenHarness 的 SupportsStreamingMessages 接口。"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import AsyncIterator
+from typing import Any
+
+from openharness.api.client import (
+    ApiMessageCompleteEvent,
+    ApiMessageRequest,
+    ApiStreamEvent,
+    ApiTextDeltaEvent,
+)
+from openharness.api.openai_client import _convert_messages_to_openai, _convert_tools_to_openai
+from openharness.api.usage import UsageSnapshot
+from openharness.engine.messages import ConversationMessage, TextBlock, ToolUseBlock
+
+from src.llm.gateway import LLMGateway
+from src.llm.models import LLMMessage, LLMRequest, LLMRole, TokenUsage
+
+
+def _openai_messages_to_llm(openai_messages: list[dict[str, Any]]) -> list[LLMMessage]:
+    """将 OpenAI 格式的聊天消息转换为平台的 LLMMessage 列表。"""
+    llm_messages: list[LLMMessage] = []
+    for msg in openai_messages:
+        role = msg.get("role", "user")
+        if role == "system":
+            llm_messages.append(LLMMessage(role=LLMRole.SYSTEM, content=msg.get("content", "") or ""))
+            continue
+        if role == "tool":
+            llm_messages.append(
+                LLMMessage(
+                    role=LLMRole.TOOL,
+                    content=msg.get("content", "") or "",
+                    tool_call_id=msg.get("tool_call_id", ""),
+                )
+            )
+            continue
+        if role == "assistant":
+            tool_calls = msg.get("tool_calls") or []
+            api_tool_calls = [
+                {
+                    "id": tc.get("id", ""),
+                    "type": "function",
+                    "function": {
+                        "name": tc.get("function", {}).get("name", ""),
+                        "arguments": tc.get("function", {}).get("arguments", "{}"),
+                    },
+                }
+                for tc in tool_calls
+            ]
+            llm_messages.append(
+                LLMMessage(
+                    role=LLMRole.ASSISTANT,
+                    content=msg.get("content") or "",
+                    tool_calls=api_tool_calls,
+                )
+            )
+            continue
+        llm_messages.append(LLMMessage(role=LLMRole.USER, content=msg.get("content", "") or ""))
+    return llm_messages
+
+
+class GatewayApiClient:
+    """将 OpenHarness QueryEngine 的 LLM 调用路由通过平台的 LLMGateway 发送。"""
+
+    def __init__(
+        self,
+        gateway: LLMGateway,
+        *,
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        session_id: str = "",
+        user_id: str = "",
+        dept: str = "",
+    ) -> None:
+        self._gateway = gateway
+        self._model = model
+        self._temperature = temperature
+        self._max_tokens = max_tokens
+        self._session_id = session_id
+        self._user_id = user_id
+        self._dept = dept
+
+    async def stream_message(self, request: ApiMessageRequest) -> AsyncIterator[ApiStreamEvent]:
+        openai_messages = _convert_messages_to_openai(request.messages, request.system_prompt)
+        llm_messages = _openai_messages_to_llm(openai_messages)
+        openai_tools = _convert_tools_to_openai(request.tools) if request.tools else []
+        has_tools = bool(openai_tools)
+
+        llm_request = LLMRequest(
+            messages=llm_messages,
+            model=self._model,
+            temperature=self._temperature,
+            max_tokens=min(request.max_tokens, self._max_tokens),
+            stream=not has_tools,
+            tools=openai_tools,
+            tool_choice="auto" if has_tools else "none",
+            session_id=self._session_id,
+            user_id=self._user_id,
+            dept=self._dept,
+        )
+
+        if has_tools:
+            response = await self._gateway.chat(llm_request)
+            if response.content:
+                chunk_size = 40
+                for i in range(0, len(response.content), chunk_size):
+                    yield ApiTextDeltaEvent(text=response.content[i : i + chunk_size])
+
+            content_blocks: list[Any] = []
+            if response.content:
+                content_blocks.append(TextBlock(text=response.content))
+            for tc in response.tool_calls:
+                function = tc.get("function", {})
+                raw_args = function.get("arguments", "{}")
+                try:
+                    parsed_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                except (json.JSONDecodeError, TypeError):
+                    parsed_args = {}
+                content_blocks.append(
+                    ToolUseBlock(
+                        id=tc.get("id", ""),
+                        name=function.get("name", ""),
+                        input=parsed_args if isinstance(parsed_args, dict) else {},
+                    )
+                )
+
+            yield ApiMessageCompleteEvent(
+                message=ConversationMessage(role="assistant", content=content_blocks),
+                usage=UsageSnapshot(
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                ),
+                stop_reason="tool_calls" if response.tool_calls else response.finish_reason,
+            )
+            return
+
+        total_usage = TokenUsage()
+        collected = ""
+        finish_reason = "stop"
+        async for chunk in self._gateway.chat_stream(llm_request):
+            if chunk.content:
+                collected += chunk.content
+                yield ApiTextDeltaEvent(text=chunk.content)
+            if chunk.usage is not None:
+                total_usage = chunk.usage
+            if chunk.finish_reason:
+                finish_reason = chunk.finish_reason
+
+        content_blocks = [TextBlock(text=collected)] if collected else []
+        yield ApiMessageCompleteEvent(
+            message=ConversationMessage(role="assistant", content=content_blocks),
+            usage=UsageSnapshot(
+                input_tokens=total_usage.prompt_tokens,
+                output_tokens=total_usage.completion_tokens,
+            ),
+            stop_reason=finish_reason,
+        )

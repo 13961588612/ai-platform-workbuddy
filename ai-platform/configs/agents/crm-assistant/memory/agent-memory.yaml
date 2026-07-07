@@ -1,0 +1,22 @@
+# =============================================================================
+# agent-memory.yaml — CRM 助手静态记忆配置入口
+# =============================================================================
+
+memory_type: static
+
+fields:
+  - personality
+  - facts
+
+personality:
+  file: personality.md
+  description: "CRM 助手的角色身份、人格风格和行为准则"
+
+facts:
+  dir: facts/
+  description: "CRM 领域知识、会员规则、积分与等级政策"
+  glob: "*.yaml"
+
+version: "1.0.0"
+updated_at: "2026-07-06"
+updated_by: "system"

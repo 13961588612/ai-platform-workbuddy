@@ -1,0 +1,28 @@
+# =============================================================================
+# crm-assistant — 敏感操作（需人工审批）
+# =============================================================================
+
+sensitive_ops:
+  - operation: adjust_member_points
+    description: 手动调整会员积分
+    requires_approval: true
+    approver_roles:
+      - crm_admin
+      - store_manager
+    audit_log: true
+
+  - operation: update_member_tags
+    description: 批量替换会员标签
+    requires_approval: true
+    approver_roles:
+      - crm_admin
+    conditions:
+      operation: replace
+    audit_log: true
+
+  - operation: export_member_profile
+    description: 导出完整客户画像
+    requires_approval: true
+    approver_roles:
+      - crm_admin
+    audit_log: true

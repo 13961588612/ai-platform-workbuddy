@@ -1,0 +1,455 @@
+%% 企业内部 AI 平台 — 关键流程时序图（v1.3）
+%% 文档: ai-platform-architecture.md 第 5 节
+%% 包含 6 个时序图：企业微信H5消息流、Skills检索调度、运行时切换、HITL审批、Bot渠道消息处理、AgentRouter路由
+
+%% ========================================
+%% 时序图 A: 企业微信 H5 用户发送消息 → Agent 处理 → 动态 UI 返回
+%% ========================================
+
+sequenceDiagram
+    autonumber
+    participant U as 用户(企业微信H5)
+    participant WA as WecomH5Adapter
+    participant JSSDK as WecomJSSDKHelper
+    participant MR as MessageRouter
+    participant RQ as Redis Streams
+    participant AC as AgentController
+    participant IDM as IdentityManager
+    participant AM as AgentManager
+    participant AI as AgentInstance
+    participant SRet as SkillRetriever
+    participant SRk as SkillRanker
+    participant RT as OpenHarnessRuntime
+    participant LLM as LLM API<br/>(deepseek-v4-flash)
+    participant ET as EventTransformer
+
+    U->>WA: H5 加载，请求 JS-SDK 鉴权配置
+    WA->>JSSDK: getJsSdkConfig(url)
+    JSSDK->>JSSDK: 生成企业微信 JS-SDK 签名
+    JSSDK-->>WA: {appId, timestamp, nonceStr, signature}
+    WA-->>U: 返回鉴权配置
+    U->>U: wx.qy.config() → 获取 UserID
+
+    U->>WA: 发送消息 "帮我查本月年假" (WebSocket)
+    WA->>WA: 验证 JWT Token
+    WA->>MR: route(InboundMessage)
+    MR->>MR: resolveAgent(channel=wecom_h5, userId)
+    MR->>RQ: XADD stream:agent:{agentId} message
+
+    Note over RQ,AC: 异步消息消费
+    RQ->>AC: 消费消息
+    AC->>IDM: authenticate(jwtToken)
+    IDM-->>AC: User{dept: "HR", roles: ["employee"]}
+
+    AC->>AM: getAgent(agentId)
+    AM-->>AC: AgentInstance
+
+    AC->>AI: processMessage(session, message)
+    AI->>SRet: retrieve("帮我查本月年假", topK=50)
+    SRet->>SRet: 生成查询向量 (bge-small-zh 本地)
+    SRet->>SRet: Qdrant 向量检索 Top-50
+    SRet-->>AI: 50 candidate Skills
+
+    AI->>SRk: rank(candidates, user, topK=20)
+    SRk->>SRk: 权限过滤（移除无权限 Skill）
+    SRk->>SRk: 精排（频率+最近使用+分类匹配）
+    SRk-->>AI: Top-10 Skills (name+desc only)
+
+    AI->>RT: run(messages, config, skills)
+    RT->>RT: 注入 Skills 名称+描述到 systemPrompt
+    RT->>LLM: stream(messages + tools) (deepseek-v4-flash)
+
+    loop 流式输出
+        LLM-->>RT: text.delta "您本月剩余年假..."
+        RT-->>AI: AgentEvent{text.delta}
+        AI-->>AC: yield AgentEvent
+
+        AC->>ET: toH5Event(event)
+        ET-->>WA: send via WebSocket
+        WA-->>U: H5 内 CopilotKit 流式渲染
+    end
+
+    LLM-->>RT: tool.call(skill-leave-query)
+    RT->>RT: 延迟加载 Skill 完整 Schema
+    RT->>RT: 执行 Skill handler (mcp://hr-mcp/query_leave)
+    RT-->>AI: AgentEvent{tool.result}
+    RT-->>AI: AgentEvent{ui.render: LeaveReportCard}
+
+    AI-->>AC: yield AgentEvent{ui.render}
+    AC->>ET: toH5Event(ui.render event)
+    ET-->>WA: send via WebSocket
+    WA-->>U: H5 内动态渲染请假报告卡片组件
+
+    RT-->>AI: AgentEvent{done}
+    AI-->>AC: yield done
+    AC->>AC: 持久化会话历史
+
+%% ========================================
+%% 时序图 B: 670+ Skills 语义检索与调度流程
+%% ========================================
+
+sequenceDiagram
+    autonumber
+    participant U as 用户请求
+    participant AI as AgentInstance
+    participant SG as SkillGrouper
+    participant SRet as SkillRetriever
+    participant QD as Qdrant
+    participant Cache as HotSkillCache
+    participant SRk as SkillRanker
+    participant PE as PermissionEngine
+    participant RT as Runtime
+    participant DB as PostgreSQL
+
+    U->>AI: "分析上个季度销售数据并生成报告"
+
+    Note over AI,SG: Step 0: 分类预过滤
+    AI->>SG: getUserCategories(user)
+    SG->>SG: 根据用户部门/角色确定候选分类
+    SG-->>AI: categories = ["Sales", "Analytics", "Report"]
+
+    Note over AI,Cache: Step 1: 缓存检查
+    AI->>Cache: get(query_hash)
+    alt 缓存命中
+        Cache-->>AI: cached Top-50
+    else 缓存未命中
+        Note over AI,QD: Step 2: 语义检索 Top-50
+        AI->>SRet: retrieve(query, categories, topK=50)
+        SRet->>SRet: embed(query) → 查询向量
+        SRet->>QD: search(vector, filter=categories, limit=50)
+
+        alt 分类内 Skill 数 < 50
+            SRet->>QD: 扩大搜索至全库
+            QD-->>SRet: Top-50 candidates
+        end
+
+        QD-->>SRet: 50 Skills (id + score)
+        SRet->>SRet: 从 DB/缓存加载 Skill 元数据
+        SRet-->>AI: 50 candidates with scores
+
+        AI->>Cache: set(query_hash, candidates, ttl=300s)
+    end
+
+    Note over AI,PE: Step 3: 权限过滤
+    AI->>SRk: rank(candidates, user, topK=20)
+    SRk->>PE: filterSkills(user, candidates)
+    PE->>PE: 检查每个 Skill 的 requiredPermissions
+    PE->>PE: 检查 accessControl.skillOverrides
+    PE-->>SRk: 35 Skills (权限通过)
+
+    Note over SRk,DB: Step 4: 精排
+    SRk->>SRk: 计算综合得分
+    Note right of SRk: score = 0.5*语义相似度 + 0.2*使用频率 + 0.15*最近使用 + 0.15*分类匹配
+
+    SRk->>DB: 查询用户最近使用记录
+    DB-->>SRk: recent_skills
+    SRk->>SRk: 动态 K 值调整
+    Note right of SRk: 简单问题 K=5 / 复杂问题 K=20
+
+    SRk-->>AI: Top-8 Skills (name + desc, 无 Schema)
+
+    Note over AI,RT: Step 5: 上下文注入
+    AI->>RT: run(messages, config, topSkills)
+    RT->>RT: 构建 systemPrompt + skills 摘要
+    Note right of RT: 仅注入 name + description, 不注入完整 parameters Schema
+
+    RT->>RT: LLM 推理...
+
+    RT-->>AI: tool.call("skill-sales-analysis")
+    Note over AI,RT: Step 6: 延迟加载 Schema
+    AI->>RT: loadSkillSchema("skill-sales-analysis")
+    RT->>RT: 从 DB/缓存加载完整 parameters
+    RT->>RT: 验证参数 → 执行 handler
+    RT-->>AI: tool.result
+
+    AI->>Cache: warmup("skill-sales-analysis")
+    Note right of Cache: 高频 Skill 加入热缓存
+
+    RT-->>AI: done
+
+%% ========================================
+%% 时序图 C: 运行时切换流程
+%% ========================================
+
+sequenceDiagram
+    autonumber
+    participant Admin as 系统管理员
+    participant AC as AgentController
+    participant AM as AgentManager
+    participant RR as RuntimeRegistry
+    participant OldRT as OpenHarnessRuntime (旧)
+    participant NewRT as CustomRuntime (新)
+    participant SG as SessionGateway
+    participant RD as Redis (会话状态)
+
+    Note over Admin,AC: 管理员发起运行时切换
+    Admin->>AC: POST /agents/{id}/runtime-switch {type: "custom"}
+    AC->>AM: switchRuntime(agentId, "custom")
+
+    Note over AM,RR: Phase 1: 创建并初始化新运行时
+    AM->>RR: create("custom", config)
+    RR->>RR: factory.create(config)
+    RR-->>AM: NewRT (CustomRuntime)
+    AM->>NewRT: initialize(config)
+    NewRT->>NewRT: 加载模型、注册 Skills、连接 MCP
+    NewRT->>NewRT: healthCheck()
+    NewRT-->>AM: HealthStatus{healthy: true}
+
+    alt 新运行时不健康
+        AM-->>AC: 500 RuntimeError("新运行时健康检查失败")
+        AC-->>Admin: 切换失败，保持原运行时
+    end
+
+    Note over AM,RD: Phase 2: 切换路由（零停机）
+    AM->>RD: SET route:agent:{id} = "custom"
+    Note right of RD: 新会话路由至新运行时, 原子操作无中断
+
+    AM->>AM: 标记 OldRT 为 Draining
+    AM->>OldRT: setState(DRAINING)
+    Note right of OldRT: Draining: 拒绝新会话, 继续处理进行中会话, 超时300s
+
+    AM-->>AC: 切换成功，旧运行时 Draining 中
+    AC-->>Admin: 200 {status: "switching", oldRuntime: "draining"}
+
+    Note over SG,RD: Phase 3: 新会话路由
+    loop 新会话请求
+        SG->>RD: GET route:agent:{id}
+        RD-->>SG: "custom"
+        SG->>NewRT: processMessage(session, msg)
+        NewRT-->>SG: AgentEvent stream
+    end
+
+    Note over OldRT,RD: Phase 4: 旧会话完成
+    loop 进行中会话（旧运行时）
+        OldRT->>OldRT: 继续处理，会话状态从 Redis 恢复
+        OldRT-->>SG: AgentEvent stream (旧会话)
+    end
+
+    alt 所有旧会话完成
+        OldRT->>AM: all sessions done
+        AM->>OldRT: shutdown()
+        OldRT-->>AM: shutdown complete
+        AM->>AM: 移除 OldRT 引用
+    else 超时未完成
+        AM->>OldRT: forceShutdown()
+        Note right of AM: 超时后强制关闭, 通知用户会话中断
+    end
+
+    Note over AM: Phase 5: 切换完成
+    AM->>RD: DEL draining:agent:{id}
+    AM-->>AC: 切换完成
+    AC-->>Admin: 通知切换完成
+
+%% ========================================
+%% 时序图 D: HITL 审批流程
+%% ========================================
+
+sequenceDiagram
+    autonumber
+    participant RT as Runtime
+    participant HM as HITLManager
+    participant ET as EventTransformer
+    participant WA as WecomH5Adapter
+    participant U as 用户(H5)
+    participant RD as Redis
+
+    RT->>RT: Agent 决定调用 skill-salary-slip (requiresApproval)
+    RT->>HM: requestApproval("skill-salary-slip", {detail})
+    HM->>HM: 创建 ApprovalRequest (id, timeout=300s)
+    HM->>RD: SET approval:{id} = request (TTL=300s)
+
+    HM-->>RT: requestId (暂停 Agent 执行)
+    RT->>RT: yield AgentEvent{approval.request}
+
+    Note over ET,WA: H5 内弹窗审批 + 应用消息通知
+    ET->>WA: toH5Event(approval.request)
+    WA-->>U: WebSocket 推送审批弹窗 (CopilotKit)
+    WA->>WA: 同时推送企业微信应用消息通知
+
+    alt 用户批准
+        U->>WA: H5 内点击 [批准]
+        WA->>HM: approve(requestId)
+        HM->>RD: GET approval:{id}
+        HM->>RD: DEL approval:{id}
+        HM-->>RT: approved
+        RT->>RT: 继续执行 Skill
+        RT-->>U: H5 更新审批状态为"已批准"
+    else 用户拒绝
+        U->>WA: H5 内点击 [拒绝]
+        WA->>HM: reject(requestId, reason)
+        HM-->>RT: rejected
+        RT->>RT: 终止 Skill 调用，返回拒绝信息
+        RT-->>U: H5 更新审批状态为"已拒绝"
+    else 超时
+        HM->>HM: checkTimeout() → request expired
+        HM-->>RT: timeout (默认拒绝)
+        RT->>RT: 终止 Skill 调用
+    end
+
+%% ========================================
+%% 时序图 E (v1.3新增): 企业微信智能机器人(Bot)渠道消息处理流程
+%% ========================================
+
+sequenceDiagram
+    autonumber
+    participant U as 用户(企业微信群/单聊)
+    participant BOT as 企业微信Bot平台
+    participant WBC as WecomBotClient<br/>(WebSocket长连接)
+    participant WBA as WecomBotAdapter
+    participant CC as ChannelCapability<br/>(WecomBotCapability)
+    participant MR as MessageRouter
+    participant RQ as Redis Streams
+    participant AC as AgentController
+    participant AR as AgentRouter
+    participant AI as AgentInstance
+    participant RT as OpenHarnessRuntime
+    participant LGW as LLMGateway
+    participant ET as EventTransformer
+    participant BEM as BotEventMapper
+    participant CB as WecomBotCardBuilder
+
+    Note over WBC,BOT: WebSocket 长连接已建立（心跳维持）
+    U->>BOT: @机器人 "帮我查本月销售额"
+    BOT->>WBC: WebSocket 推送消息（企业微信Bot协议）
+    WBC->>WBC: 消息解码 + 来源校验
+    WBC->>WBA: receive(rawMessage)
+    WBA->>WBA: 解析为 InboundMessage{channel: WECOM_BOT}
+    WBA->>MR: route(InboundMessage)
+    MR->>RQ: XADD stream:agent:{agentId} message
+
+    Note over RQ,AC: 异步消息消费
+    RQ->>AC: 消费消息
+    AC->>AR: route(request, sessionCtx)
+
+    Note over AR: AgentRouter 4级策略链
+    AR->>AR: 1.会话亲和性 — 检查session绑定
+    alt 会话已有绑定Agent
+        AR-->>AC: RouteResult{agentId, strategy: session_affinity}
+    else 未绑定
+        AR->>AR: 2.关键词匹配 — "销售额"匹配财务助手
+        alt 关键词命中
+            AR-->>AC: RouteResult{agentId: finance-assistant, strategy: keyword_matching}
+        else 未命中
+            AR->>AR: 3.语义检索 — embedding → Qdrant检索
+            AR-->>AC: RouteResult{agentId, strategy: semantic_retrieval}
+        end
+    end
+    AR->>AR: 记录路由日志（route_logs表）
+
+    AC->>AI: processMessage(session, message)
+    AI->>RT: run(messages, config, skills)
+
+    Note over RT,LGW: 通过LLM网关调用厂家API
+    RT->>LGW: chatStream(request{model: deepseek-v4-flash})
+    LGW->>LGW: APIKeyManager选Key + QuotaManager检查配额
+    LGW->>LGW: OutboundProxyManager获取代理
+    LGW->>BOT: 经出站代理 → DeepSeek API
+
+    loop 流式输出（Bot渠道不支持流式，需缓冲）
+        BOT-->>LGW: text.delta "本月销售额..."
+        LGW-->>RT: LLMChunk
+        RT-->>AI: AgentEvent{text.delta}
+        AI-->>AC: yield AgentEvent{text.delta}
+        AC->>ET: transform(event, channel=WECOM_BOT)
+        ET->>CC: getCapability() → WecomBotCapability
+        CC-->>ET: supportsStreaming=false
+        ET->>ET: 缓冲text.delta（不发送，等待完整消息）
+    end
+
+    RT-->>AI: AgentEvent{done, tokenUsage}
+    AI-->>AC: yield done
+
+    Note over ET,BEM: 能力感知降级 — 缓冲的text.delta → text_notice卡片
+    AC->>ET: flushBufferedEvents(channel=WECOM_BOT)
+    ET->>BEM: mapTextDelta(bufferedDeltas)
+    BEM->>CB: buildTextNotice(title, content)
+    CB-->>BEM: cardData{text_notice}
+    BEM-->>ET: BotCard{text_notice, data}
+    ET-->>WBA: sendCard("text_notice", cardData)
+
+    WBA->>WBC: send(cardMessage)
+    WBC->>BOT: WebSocket 发送 template_card
+    BOT-->>U: 企业微信群/单聊显示文本通知卡片
+
+    Note over RT: 若Agent产生ui.render事件
+    RT-->>AI: AgentEvent{ui.render, component: "SalesChart"}
+    AI-->>AC: yield AgentEvent{ui.render}
+    AC->>ET: transform(event, channel=WECOM_BOT)
+    ET->>CC: getCapability() → supportsCustomUI=false
+    ET->>BEM: mapUIRender("SalesChart", props)
+    BEM->>BEM: 组件类型匹配：图表 → news_notice卡片
+    BEM->>CB: buildNewsNotice(title, summary, imageUrl, linkUrl)
+    BEM-->>ET: BotCard{news_notice, data}
+    ET-->>WBA: sendCard("news_notice", cardData)
+    WBA->>WBC: send(cardMessage)
+    WBC->>BOT: WebSocket 发送 template_card
+    BOT-->>U: 企业微信群显示图文通知卡片
+
+    Note over LGW: Token用量追踪
+    LGW->>LGW: TokenTracker.record(sessionId, userId, dept, model, usage)
+
+%% ========================================
+%% 时序图 F (v1.3新增): AgentRouter 智能路由流程
+%% ========================================
+
+sequenceDiagram
+    autonumber
+    participant AC as AgentController
+    participant AR as AgentRouter
+    participant RD as Redis
+    participant PG as PostgreSQL
+    participant QD as Qdrant
+    participant EMB as EmbeddingModel<br/>(bge-small-zh-v1.5)
+    participant RL as RouteLogger
+    participant AM as AgentManager
+
+    AC->>AR: route(request, sessionCtx)
+    AR->>AR: 加载所有 enabled=true 的 Agent 配置列表
+
+    Note over AR: 策略1: 会话亲和性 (SessionAffinityStrategy)
+    AR->>RD: GET session:{sessionId}:agent_binding
+    alt 会话已有绑定
+        RD-->>AR: agentId = "hr-assistant"
+        AR->>AR: 验证Agent仍enabled + 健康检查
+        AR->>RL: log(RouteResult{agentId, strategy: session_affinity, confidence: 1.0})
+        AR-->>AC: RouteResult{agentId: "hr-assistant"}
+    else 无绑定
+        RD-->>AR: nil
+
+        Note over AR: 策略2: 关键词匹配 (KeywordMatchStrategy)
+        AR->>AR: 遍历各Agent的routing.keywords
+        AR->>AR: "请假/年假" in "帮我查本月年假" → 匹配 hr-assistant
+        alt 关键词命中
+            AR->>RL: log(RouteResult{agentId: hr-assistant, strategy: keyword_matching, confidence: 0.9})
+            AR->>RD: SET session:{sessionId}:agent_binding = "hr-assistant" (TTL=24h)
+            AR-->>AC: RouteResult{agentId: "hr-assistant"}
+        else 关键词未命中
+
+            Note over AR: 策略3: 语义检索 (SemanticSearchStrategy)
+            AR->>EMB: embed("帮我查本月年假") → 查询向量
+            EMB-->>AR: queryVector[512]
+            AR->>QD: search(collection: "agent_routing_index", vector, topK: 5)
+            Note right of QD: 与Skills检索共用Qdrant实例<br/>不同collection: agent_routing_index
+            QD-->>AR: Top-5 Agent candidates + similarity scores
+
+            alt Top-1 相似度 > 阈值(0.75)
+                AR->>AR: 选择Top-1 Agent
+                AR->>RL: log(RouteResult{agentId, strategy: semantic_retrieval, confidence: score})
+                AR->>RD: SET session:{sessionId}:agent_binding = agentId (TTL=24h)
+                AR-->>AC: RouteResult{agentId}
+            else 相似度低于阈值
+
+                Note over AR: 策略4: 默认Agent兜底 (DefaultFallbackStrategy)
+                AR->>PG: 查询 default_agent 配置
+                PG-->>AR: default-agent
+                AR->>RL: log(RouteResult{agentId: default-agent, strategy: default_fallback, confidence: 0})
+                AR-->>AC: RouteResult{agentId: "default-agent"}
+            end
+        end
+    end
+
+    AC->>AM: getAgent(matchedAgentId)
+    AM-->>AC: AgentInstance
+
+    Note over RL: 路由日志已记录到route_logs表
+    RL->>PG: INSERT route_logs (session_id, user_id, input_text, matched_agent, strategy_used, latency_ms, timestamp)

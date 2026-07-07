@@ -1,0 +1,11 @@
+# =============================================================================
+# crm-assistant — Skill 权限映射
+# =============================================================================
+
+skill_permissions:
+  member.profile:
+    required: [crm:member:read]
+  member.points-account:
+    required: [crm:member:read]
+  member.coupons-account:
+    required: [crm:member:read]

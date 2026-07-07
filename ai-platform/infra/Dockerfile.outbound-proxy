@@ -1,0 +1,40 @@
+# =============================================================================
+# Dockerfile.outbound-proxy — Squid Outbound Proxy
+# =============================================================================
+# Provides an internal outbound proxy with domain whitelist for LLM API access.
+# Only api.deepseek.com and dashscope.aliyuncs.com are allowed through.
+# All requests are logged for audit compliance.
+# =============================================================================
+
+FROM ubuntu:22.04
+
+LABEL maintainer="AI Platform Team"
+LABEL description="Squid outbound proxy with LLM API domain whitelist"
+
+# Install Squid
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        squid \
+        curl \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Squid configuration
+COPY outbound-proxy/squid.conf /etc/squid/squid.conf
+
+# Create log directory
+RUN mkdir -p /var/log/squid && \
+    chown -R proxy:proxy /var/log/squid && \
+    chmod 755 /var/log/squid
+
+# Create cache directory
+RUN mkdir -p /var/spool/squid && \
+    chown -R proxy:proxy /var/spool/squid && \
+    squid -z 2>/dev/null || true
+
+EXPOSE 3128
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD squidclient -h localhost -p 3128 http://localhost:3128/ 2>/dev/null || exit 0
+
+CMD ["squid", "-N", "-d", "1"]

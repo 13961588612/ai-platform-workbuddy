@@ -1,0 +1,679 @@
+%% 企业内部 AI 平台 — 核心类图（v1.3）
+%% 文档: ai-platform-architecture.md 第 4 节
+%% v1.3 新增：ChannelCapability, WecomBotAdapter, AgentRouter, LLMGateway, ConfigManager
+
+classDiagram
+    %% ===== 数据模型 =====
+    class AgentConfig {
+        +str id
+        +str name
+        +str description
+        +RuntimeConfig runtime
+        +ModelConfig model
+        +RoutingConfig routing
+        +str systemPrompt
+        +list~SkillRef~ skills
+        +list~MCPServerConfig~ mcpServers
+        +AccessControl accessControl
+        +PushConfig push
+        +str version
+        +datetime createdAt
+        +datetime updatedAt
+    }
+
+    class Skill {
+        +str id
+        +str name
+        +str description
+        +str category
+        +list~str~ tags
+        +dict parameters
+        +list~str~ requiredPermissions
+        +list~float~ embedding
+        +str handler
+        +int timeout
+        +str version
+        +str status
+    }
+
+    class Session {
+        +str id
+        +str agentId
+        +str userId
+        +str channel
+        +list~Message~ messages
+        +AgentState state
+        +datetime createdAt
+        +datetime updatedAt
+    }
+
+    class Message {
+        +str id
+        +str role
+        +str content
+        +dict metadata
+        +datetime timestamp
+    }
+
+    class User {
+        +str id
+        +str name
+        +str department
+        +list~str~ roles
+        +str channel
+        +dict profile
+    }
+
+    %% ===== Agent 管理 =====
+    class AgentManager {
+        -dict~str, AgentInstance~ instances
+        -RuntimeRegistry runtimeRegistry
+        -SkillRegistry skillRegistry
+        +createAgent(config: AgentConfig) AgentInstance
+        +startAgent(agentId: str) void
+        +pauseAgent(agentId: str) void
+        +resumeAgent(agentId: str) void
+        +stopAgent(agentId: str) void
+        +deleteAgent(agentId: str) void
+        +getAgent(agentId: str) AgentInstance
+        +listAgents() list~AgentInstance~
+        +updateConfig(agentId: str, config: AgentConfig) void
+        +switchRuntime(agentId: str, runtimeType: str) void
+    }
+
+    class AgentInstance {
+        +str id
+        +AgentConfig config
+        +AgentRuntime runtime
+        +InstanceState state
+        +datetime startedAt
+        +int activeSessions
+        +initialize() void
+        +processMessage(session: Session, message: Message) AsyncIterable~AgentEvent~
+        +healthCheck() HealthStatus
+        +shutdown() void
+    }
+
+    class LifecycleStateMachine {
+        -InstanceState currentState
+        +transition(event: LifecycleEvent) InstanceState
+        +canTransition(from: InstanceState, to: InstanceState) bool
+    }
+
+    %% ===== 运行时抽象 =====
+    class AgentRuntime {
+        <<interface>>
+        +str runtimeType
+        +str version
+        +run(messages: list~Message~, config: AgentConfig) AsyncIterable~AgentEvent~
+        +registerTools(skills: list~Skill~) void
+        +registerMCP(server: MCPServerConfig) void
+        +getState(sessionId: str) AgentState
+        +setState(sessionId: str, state: AgentState) void
+        +initialize(config: AgentConfig) void
+        +healthCheck() HealthStatus
+        +shutdown() void
+    }
+
+    class OpenHarnessRuntime {
+        %% 港大HKUDS开源Python Agent框架封装
+        %% 引入OpenHarness engine，替换LLM调用为平台LLMGateway
+        %% 替换内置Skills为平台Skills系统，保留MCP客户端与权限系统
+        -dict config
+        -list~Skill~ registeredTools
+        -list~MCPServerConfig~ mcpServers
+        +run(messages, config) AsyncIterable~AgentEvent~
+        +registerTools(skills) void
+        +registerMCP(server) void
+        +initialize(config) void
+        +healthCheck() HealthStatus
+        +shutdown() void
+    }
+
+    class RuntimeRegistry {
+        -dict~str, RuntimeFactory~ factories
+        +register(type: str, factory: RuntimeFactory) void
+        +create(type: str, config: AgentConfig) AgentRuntime
+        +listRuntimes() list~RuntimeInfo~
+        +getDefault() str
+    }
+
+    class AgentEvent {
+        +str type
+        +str content
+        +str toolName
+        +dict args
+        +dict result
+        +str component
+        +dict props
+        +str skillId
+        +str errorCode
+        +TokenUsage tokenUsage
+    }
+
+    %% ===== Skills 系统 =====
+    class SkillRegistry {
+        -dict~str, Skill~ skills
+        -VectorIndexer indexer
+        -HotSkillCache cache
+        +register(skill: Skill) void
+        +unregister(skillId: str) void
+        +get(skillId: str) Skill
+        +listByCategory(category: str) list~Skill~
+        +updateEmbedding(skillId: str) void
+        +importFromMCP(server: MCPServerConfig) list~Skill~
+    }
+
+    class SkillRetriever {
+        -QdrantClient qdrant
+        -HotSkillCache cache
+        -SkillGrouper grouper
+        +retrieve(query: str, topK: int) list~SkillScore~
+        +retrieveByCategory(query: str, categories: list) list~SkillScore~
+        +getCached(query: str) list~SkillScore~
+    }
+
+    class SkillRanker {
+        -PermissionEngine permissionEngine
+        +rank(candidates: list~SkillScore~, user: User, topK: int) list~Skill~
+        +filterByPermission(skills: list, user: User) list
+        +rerank(skills: list, context: dict) list
+    }
+
+    class VectorIndexer {
+        -QdrantClient qdrant
+        -EmbeddingModel embedder
+        +indexSkill(skill: Skill) void
+        +reindexAll(skills: list~Skill~) void
+        +deleteIndex(skillId: str) void
+        +generateEmbedding(text: str) list~float~
+    }
+
+    class HotSkillCache {
+        -RedisClient redis
+        +get(query: str) list~SkillScore~
+        +set(query: str, skills: list, ttl: int) void
+        +warmup(skillIds: list~str~) void
+        +invalidate(skillId: str) void
+    }
+
+    %% ===== 消息网关 + 渠道能力 (v1.3) =====
+    class MessageRouter {
+        -RedisStreamProducer producer
+        +route(message: InboundMessage) str
+        +resolveAgent(channel: str, userId: str) str
+    }
+
+    class ChannelAdapter {
+        <<interface>>
+        +receive(rawMessage: dict) InboundMessage
+        +send(event: AgentEvent, target: str) void
+        +updateCard(responseCode: str, content: dict) void
+        +getCapability() ChannelCapability
+    }
+
+    class ChannelCapability {
+        <<interface>>
+        +bool supportsStreaming
+        +bool supportsCustomUI
+        +list~str~ supportedCardTypes
+        +bool supportsFileUpload
+        +int maxMessageLength
+        +MarkdownSupportLevel markdownSupportLevel
+        +canRender(eventType: AgentEventType) bool
+        +getCardType(componentType: str) str
+    }
+
+    class WecomH5Capability {
+        +bool supportsStreaming = true
+        +bool supportsCustomUI = true
+        +list~str~ supportedCardTypes = []
+        +bool supportsFileUpload = false
+        +int maxMessageLength = 4096
+        +MarkdownSupportLevel markdownSupportLevel = FULL
+    }
+
+    class WecomBotCapability {
+        +bool supportsStreaming = false
+        +bool supportsCustomUI = false
+        +list~str~ supportedCardTypes
+        +bool supportsFileUpload = false
+        +int maxMessageLength = 2048
+        +MarkdownSupportLevel markdownSupportLevel = LIMITED
+    }
+
+    class H5Capability {
+        +bool supportsStreaming = true
+        +bool supportsCustomUI = true
+        +bool supportsFileUpload = true
+        +int maxMessageLength = 8192
+        +MarkdownSupportLevel markdownSupportLevel = FULL
+    }
+
+    class WecomH5Adapter {
+        -WecomJSSDKHelper jsSdkHelper
+        -WecomH5Capability capability
+        +receive(rawMessage) InboundMessage
+        +send(event, target) void
+        +getJsSdkConfig(url: str) dict
+        +pushAppMessage(msg: AppMessage, target: str) void
+        +getCapability() ChannelCapability
+    }
+
+    class WecomBotAdapter {
+        -WecomBotClient wsClient
+        -WecomBotCardBuilder cardBuilder
+        -WecomBotCapability capability
+        +receive(rawMessage) InboundMessage
+        +send(event, target) void
+        +sendCard(cardType: str, cardData: dict, target: str) void
+        +updateCard(responseCode: str, content: dict) void
+        +getCapability() ChannelCapability
+        +start() void
+        +stop() void
+    }
+
+    class WecomBotClient {
+        -str wsUrl
+        -WebSocket connection
+        -int heartbeatInterval
+        -int maxRetries
+        +connect() void
+        +disconnect() void
+        +send(message: dict) void
+        +onMessage(callback: callable) void
+        +startHeartbeat() void
+        +reconnect() void
+        +isConnected() bool
+    }
+
+    class WecomBotCardBuilder {
+        +buildTextNotice(title: str, content: str) dict
+        +buildNewsNotice(title: str, summary: str, imageUrl: str, linkUrl: str) dict
+        +buildButtonInteraction(title: str, content: str, buttons: list) dict
+        +buildVoteInteraction(title: str, content: str, options: list) dict
+        +buildMultipleInteraction(title: str, fields: list) dict
+        +buildTemplateNotice(templateId: str, data: dict) dict
+    }
+
+    class H5Adapter {
+        -WebSocketServer wsServer
+        -H5Capability capability
+        +receive(rawMessage) InboundMessage
+        +send(event, target) void
+        +streamEvent(event: AgentEvent, ws: WebSocket) void
+        +getCapability() ChannelCapability
+    }
+
+    class EventTransformer {
+        -CapabilityRegistry capabilityRegistry
+        -BotEventMapper botEventMapper
+        +transform(event: AgentEvent, channel: ChannelType) ChannelMessage
+        +toWecomAppMessage(event: AgentEvent) AppMessage
+        +toH5Event(event: AgentEvent) dict
+        +toBotCard(event: AgentEvent, cardType: str) dict
+        +degradeByCapability(event: AgentEvent, capability: ChannelCapability) ChannelMessage
+    }
+
+    class BotEventMapper {
+        -WecomBotCardBuilder cardBuilder
+        +mapTextDelta(deltas: list~AgentEvent~) dict
+        +mapUIRender(component: str, props: dict) dict
+        +mapApprovalRequest(detail: dict) dict
+        +mapToolResult(result: dict) dict
+        +mapError(error: dict) dict
+    }
+
+    %% ===== AgentRouter 智能路由 (v1.3 新增) =====
+    class AgentRouter {
+        -list~RoutingStrategy~ strategies
+        -RouteLogger logger
+        -QdrantClient qdrant
+        +route(request: UserRequest, sessionCtx: SessionContext) RouteResult
+        +registerStrategy(strategy: RoutingStrategy) void
+        +getRouteLog(sessionId: str) RouteLog
+        +getStats(startTime, endTime) RouteStats
+    }
+
+    class RoutingStrategy {
+        <<interface>>
+        +str name
+        +int priority
+        +route(request: UserRequest, candidates: list~AgentConfig~) RouteResult
+        +isApplicable(request: UserRequest, sessionCtx: SessionContext) bool
+    }
+
+    class SessionAffinityStrategy {
+        +str name = "session_affinity"
+        +int priority = 1
+        +route(request, candidates) RouteResult
+    }
+
+    class KeywordMatchStrategy {
+        +str name = "keyword_matching"
+        +int priority = 2
+        +route(request, candidates) RouteResult
+        +matchKeywords(text: str, keywords: list~str~) bool
+    }
+
+    class SemanticSearchStrategy {
+        +str name = "semantic_retrieval"
+        +int priority = 3
+        -QdrantClient qdrant
+        -EmbeddingModel embedder
+        +route(request, candidates) RouteResult
+        +embedAndSearch(text: str, topK: int) list~AgentScore~
+    }
+
+    class DefaultFallbackStrategy {
+        +str name = "default_fallback"
+        +int priority = 4
+        +route(request, candidates) RouteResult
+    }
+
+    class RouteLogger {
+        +log(result: RouteResult) void
+        +getLogs(filter: RouteLogFilter) list~RouteLog~
+        +getStats(startTime, endTime) RouteStats
+    }
+
+    class RouteResult {
+        +str agentId
+        +str strategyUsed
+        +float confidence
+        +int latencyMs
+        +dict metadata
+    }
+
+    class RouteLog {
+        +str id
+        +str sessionId
+        +str userId
+        +str inputText
+        +str matchedAgentId
+        +str strategyUsed
+        +int latencyMs
+        +datetime timestamp
+    }
+
+    %% ===== LLM 网关层 (v1.3 新增) =====
+    class LLMGateway {
+        -APIKeyManager keyManager
+        -QuotaManager quotaManager
+        -OutboundProxyManager proxyManager
+        -TokenTracker tokenTracker
+        -FailoverManager failoverManager
+        -dict~str, LLMAdapter~ adapters
+        +chat(request: LLMRequest) AsyncIterable~LLMChunk~
+        +chatStream(request: LLMRequest) AsyncIterable~LLMChunk~
+        +selectProvider(model: str) str
+        +healthCheck() dict
+    }
+
+    class APIKeyManager {
+        -dict~str, list~APIKey~~ keyPool
+        -dict~str, int~ rotationIndex
+        +getKey(provider: str) APIKey
+        +rotateKey(provider: str) void
+        +addKey(provider: str, key: APIKey) void
+        +removeKey(provider: str, keyId: str) void
+        +getKeyStatus(provider: str) KeyPoolStatus
+    }
+
+    class QuotaManager {
+        -dict~str, int~ userQuotas
+        -dict~str, int~ deptQuotas
+        +checkQuota(userId: str, dept: str, tokens: int) bool
+        +consumeQuota(userId: str, dept: str, tokens: int) void
+        +setQuota(scope: str, scopeId: str, limit: int) void
+        +getUsage(scope: str, scopeId: str) QuotaUsage
+        +alertIfNeeded(userId: str, dept: str) void
+    }
+
+    class OutboundProxyManager {
+        -list~ProxyNode~ proxyPool
+        -int currentIndex
+        +getProxy() ProxyNode
+        +healthCheck() void
+        +addProxy(node: ProxyNode) void
+        +removeProxy(nodeId: str) void
+        +isAllowed(domain: str) bool
+        +logRequest(request: dict, response: dict) void
+    }
+
+    class TokenTracker {
+        +record(sessionId: str, userId: str, dept: str, model: str, usage: TokenUsage) void
+        +getUsageBySession(sessionId: str) TokenUsageSummary
+        +getUsageByUser(userId: str, dateRange: DateRange) TokenUsageSummary
+        +getUsageByDept(dept: str, dateRange: DateRange) TokenUsageSummary
+        +getTotalUsage(dateRange: DateRange) TokenUsageSummary
+    }
+
+    class FailoverManager {
+        -dict~str, str~ failoverMap
+        -dict~str, datetime~ lastFailure
+        +checkProvider(provider: str) bool
+        +triggerFailover(provider: str) str
+        +recordFailure(provider: str, error: str) void
+        +resetProvider(provider: str) void
+    }
+
+    %% ===== 配置管理 (v1.3 新增) =====
+    class ConfigManager {
+        -str mode
+        -ConfigLoader loader
+        -ConfigValidator validator
+        -ConfigWatcher watcher
+        +loadAgent(agentId: str) AgentConfig
+        +saveAgent(agentId: str, config: AgentConfig) void
+        +listAgents() list~AgentConfig~
+        +reloadAgent(agentId: str) void
+        +exportToFile(agentId: str, path: str) void
+        +importFromFile(path: str) str
+    }
+
+    class ConfigWatcher {
+        -FileSystemWatcher fsWatcher
+        -DatabasePoller dbPoller
+        +watch(path: str, callback: callable) void
+        +onConfigChange(agentId: str, change: ConfigChange) void
+        +start() void
+        +stop() void
+    }
+
+    %% ===== 身份与权限 =====
+    class IdentityManager {
+        -str jwtSecret
+        -TokenValidator tokenValidator
+        +verifyWecomUser(userId: str, code: str) JWT
+        +verifyPassword(username: str, password: str) JWT
+        +signJWT(claims: dict) JWT
+        +verifyJWT(token: str) Claims
+        +refreshToken(refreshToken: str) TokenSet
+        +getPermissions(userId: str) list~Permission~
+        +getUser(userId: str) User
+    }
+
+    class PermissionEngine {
+        +checkPermission(user: User, skill: Skill) bool
+        +filterSkills(user: User, skills: list~Skill~) list~Skill~
+        +getAllowedSkills(user: User) list~str~
+    }
+
+    %% ===== MCP 管理 =====
+    class MCPManager {
+        -dict~str, MCPClient~ clients
+        +connect(config: MCPServerConfig) MCPClient
+        +disconnect(name: str) void
+        +discoverTools(name: str) list~Tool~
+        +callTool(name: str, tool: str, args: dict) dict
+        +listServers() list~MCPServerConfig~
+    }
+
+    %% ===== 推送与 HITL =====
+    class PushService {
+        -PushScheduler scheduler
+        -MessageRouter router
+        +push(target: str, channel: str, content: PushContent) void
+        +schedule(cron: str, target: str, template: str) void
+        +cancel(scheduleId: str) void
+    }
+
+    class HITLManager {
+        -dict~str, ApprovalRequest~ pending
+        +requestApproval(skillId: str, detail: dict) str
+        +approve(requestId: str) void
+        +reject(requestId: str, reason: str) void
+        +checkTimeout() void
+    }
+
+    %% ===== 业务系统适配层 =====
+    class BusinessSystemAdapter {
+        <<interface>>
+        +listTools() list~Tool~
+        +callTool(name: str, args: dict) dict
+        +healthCheck() bool
+        +getSystemInfo() SystemInfo
+    }
+
+    %% ===== 枚举 =====
+    class InstanceState {
+        <<enumeration>>
+        CREATED
+        RUNNING
+        PAUSED
+        DRAINING
+        STOPPED
+        DELETED
+    }
+
+    class AgentEventType {
+        <<enumeration>>
+        TEXT_DELTA
+        TOOL_CALL
+        TOOL_RESULT
+        UI_RENDER
+        APPROVAL_REQUEST
+        ERROR
+        DONE
+    }
+
+    class ChannelType {
+        <<enumeration>>
+        WECOM_H5
+        WECOM_BOT
+        H5
+    }
+
+    class TemplateCardType {
+        <<enumeration>>
+        TEXT_NOTICE
+        NEWS_NOTICE
+        BUTTON_INTERACTION
+        VOTE_INTERACTION
+        MULTIPLE_INTERACTION
+        TEMPLATE_NOTICE
+    }
+
+    class MarkdownSupportLevel {
+        <<enumeration>>
+        FULL
+        LIMITED
+        NONE
+    }
+
+    class RoutingStrategyType {
+        <<enumeration>>
+        SESSION_AFFINITY
+        KEYWORD_MATCHING
+        SEMANTIC_RETRIEVAL
+        DEFAULT_FALLBACK
+    }
+
+    class RuntimeType {
+        <<enumeration>>
+        OPENHARNESS
+        CUSTOM
+        LANGGRAPH
+    }
+
+    class LLMProvider {
+        <<enumeration>>
+        DEEPSEEK
+        QWEN
+        ERNIE
+        ZHIPU
+    }
+
+    class ConfigMode {
+        <<enumeration>>
+        FILE_SYSTEM
+        DATABASE
+        DUAL
+    }
+
+    class MCPTransport {
+        <<enumeration>>
+        STDIO
+        HTTP
+        SSE
+    }
+
+    %% ===== 关系 =====
+    AgentManager --> AgentInstance : manages
+    AgentManager --> RuntimeRegistry : uses
+    AgentManager --> SkillRegistry : uses
+    AgentInstance --> AgentConfig : has
+    AgentInstance --> AgentRuntime : uses
+    AgentInstance --> LifecycleStateMachine : has
+
+    AgentRuntime <|.. OpenHarnessRuntime : implements
+    RuntimeRegistry --> AgentRuntime : creates
+
+    SkillRegistry --> VectorIndexer : uses
+    SkillRegistry --> HotSkillCache : uses
+    SkillRetriever --> HotSkillCache : uses
+    SkillRetriever --> SkillGrouper : uses
+    SkillRanker --> PermissionEngine : uses
+
+    ChannelAdapter <|.. WecomH5Adapter : implements
+    ChannelAdapter <|.. WecomBotAdapter : implements
+    ChannelAdapter <|.. H5Adapter : implements
+    ChannelCapability <|.. WecomH5Capability : implements
+    ChannelCapability <|.. WecomBotCapability : implements
+    ChannelCapability <|.. H5Capability : implements
+    WecomH5Adapter --> WecomH5Capability : has
+    WecomBotAdapter --> WecomBotCapability : has
+    H5Adapter --> H5Capability : has
+    WecomBotAdapter --> WecomBotClient : uses
+    WecomBotAdapter --> WecomBotCardBuilder : uses
+    MessageRouter --> ChannelAdapter : routes through
+    EventTransformer --> ChannelAdapter : transforms for
+    EventTransformer --> ChannelCapability : uses for degradation
+    EventTransformer --> BotEventMapper : delegates Bot mapping
+    BotEventMapper --> WecomBotCardBuilder : builds cards
+
+    AgentRouter --> RoutingStrategy : orchestrates
+    RoutingStrategy <|.. SessionAffinityStrategy : implements
+    RoutingStrategy <|.. KeywordMatchStrategy : implements
+    RoutingStrategy <|.. SemanticSearchStrategy : implements
+    RoutingStrategy <|.. DefaultFallbackStrategy : implements
+    AgentRouter --> RouteLogger : logs via
+    RouteLogger --> RouteLog : creates
+    RouteResult --> RouteLog : persisted as
+
+    LLMGateway --> APIKeyManager : uses
+    LLMGateway --> QuotaManager : uses
+    LLMGateway --> OutboundProxyManager : routes through
+    LLMGateway --> TokenTracker : records via
+    LLMGateway --> FailoverManager : uses
+    OpenHarnessRuntime --> LLMGateway : calls
+
+    ConfigManager --> ConfigLoader : uses
+    ConfigManager --> ConfigValidator : uses
+    ConfigManager --> ConfigWatcher : uses
+    ConfigWatcher --> AgentManager : notifies changes
+
+    AgentConfig --> Skill : references
+    Session --> Message : contains
+    Session --> AgentConfig : belongs to
