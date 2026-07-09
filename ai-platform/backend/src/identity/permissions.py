@@ -31,6 +31,7 @@ class PermissionEngine:
     """评估用户是否可以调用特定 Skill。"""
 
     def __init__(self) -> None:
+        """初始化权限引擎（空角色/部门内存缓存）。"""
         # 生产环境中，角色/部门数据从数据库加载。
         # 对于内存引擎，我们期望调用方注入这些数据。
         self._role_cache: dict[str, dict] = {}

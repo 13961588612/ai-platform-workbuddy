@@ -31,6 +31,7 @@ class ConfigWatcher:
     """
 
     def __init__(self) -> None:
+        """初始化配置变更监控器（文件 mtime 或数据库轮询）。"""
         self._settings = get_settings()
         self._base_path: str = self._settings.CONFIG_BASE_PATH
         self._mode: str = self._settings.CONFIG_MODE

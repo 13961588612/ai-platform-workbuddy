@@ -55,14 +55,31 @@ class StreamKeys:
 
     @staticmethod
     def agent_inbound(agent_id: str) -> str:
+        """返回指定 Agent 的入站 stream 键名。
+
+        Args:
+            agent_id: Agent 实例 ID。
+
+        Returns:
+            ``stream:agent:{agentId}`` 格式的键名。
+        """
         return f"stream:agent:{agent_id}"
 
     @staticmethod
     def channel_inbound(channel: str) -> str:
+        """返回指定渠道的入站 stream 键名。
+
+        Args:
+            channel: Gateway 渠道标识（如 ``h5``）。
+
+        Returns:
+            ``stream:inbound:{channel}`` 格式的键名。
+        """
         return f"stream:inbound:{channel}"
 
     @staticmethod
     def agent_events() -> str:
+        """返回 Agent 出站事件 stream 的全局键名。"""
         return AGENT_EVENTS_STREAM
 
 
@@ -106,6 +123,14 @@ def normalize_stream_fields(raw_fields: Any) -> dict[str, str]:
 
 
 def to_gateway_channel(channel: str) -> str:
+    """将 Backend 会话渠道名映射为 Gateway EventTransformer 渠道名。
+
+    Args:
+        channel: Backend 侧渠道标识。
+
+    Returns:
+        Gateway 识别的渠道名；无映射时原样返回。
+    """
     return GATEWAY_CHANNEL_MAP.get(channel, channel)
 
 
@@ -113,6 +138,11 @@ class StreamProducer:
     """将 AgentEvent 写入 stream:agent:events，供 Gateway 消费。"""
 
     def __init__(self, redis: aioredis.Redis) -> None:
+        """绑定 Redis 客户端，用于向出站 stream 写入 Agent 事件。
+
+        Args:
+            redis: 已连接的 ``redis.asyncio.Redis`` 实例。
+        """
         self._redis = redis
 
     async def publish_agent_event(
@@ -125,6 +155,19 @@ class StreamProducer:
         trace_id: str,
         event: AgentEvent,
     ) -> str:
+        """将 ``AgentEvent`` 序列化后 XADD 到 ``stream:agent:events``。
+
+        Args:
+            session_id: 会话 ID。
+            user_id: 用户 ID。
+            channel: Backend 渠道名（会经 ``to_gateway_channel`` 转换）。
+            agent_id: Agent 实例 ID。
+            trace_id: 分布式追踪 ID。
+            event: 要发布的 Agent 事件。
+
+        Returns:
+            Redis 分配的 stream 消息 ID。
+        """
         payload = event.model_dump(mode="json", exclude_none=True)
         fields = {
             "sessionId": session_id,
@@ -162,4 +205,9 @@ async def ensure_consumer_group(redis: aioredis.Redis, stream_key: str) -> None:
 
 
 def build_consumer_name() -> str:
+    """生成基于当前进程 ID 的 Redis 消费者名称。
+
+    Returns:
+        形如 ``agent-core-{pid}`` 的消费者名。
+    """
     return f"agent-core-{os.getpid()}"

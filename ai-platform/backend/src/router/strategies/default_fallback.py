@@ -25,15 +25,18 @@ class DefaultFallbackStrategy(RoutingStrategy):
     """
 
     def __init__(self) -> None:
+        """从配置读取默认 Agent ID。"""
         self._settings = get_settings()
         self._default_agent_id: str = self._settings.AGENT_ROUTER_DEFAULT_AGENT
 
     @property
     def name(self) -> str:
+        """策略标识符：``default_fallback``。"""
         return "default_fallback"
 
     @property
     def priority(self) -> int:
+        """策略优先级（4 = 最低，最后尝试）。"""
         return 4
 
     async def route(

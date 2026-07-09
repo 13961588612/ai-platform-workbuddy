@@ -59,6 +59,13 @@ class BusinessSystemAdapter(ABC):
         base_url: str = "",
         timeout: float = 30.0,
     ) -> None:
+        """初始化业务系统类型、后端 URL、超时并注册工具定义。
+
+        Args:
+            system_type: 业务系统类型标识符（如 ``finance``、``crm``）。
+            base_url: 后端系统 API 基础 URL。
+            timeout: HTTP 请求超时时间（秒）。
+        """
         self._system_type = system_type
         self._base_url = base_url
         self._timeout = timeout

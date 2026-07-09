@@ -119,6 +119,7 @@ class TestTwoPhaseRetrieval:
         call_count = 0
 
         async def mock_qdrant_search(**kwargs):
+            """按 scope 返回不同检索结果，并校验 session 隔离参数。"""
             nonlocal call_count
             call_count += 1
             # First call = user-level (scope="user")

@@ -31,6 +31,7 @@ class TokenManager:
     """管理 JWT 创建、验证和刷新。"""
 
     def __init__(self) -> None:
+        """从应用配置加载 JWT 密钥与过期时间。"""
         self._settings = get_settings()
         self._secret = self._settings.JWT_SECRET_KEY
         self._algorithm = _ALGORITHM

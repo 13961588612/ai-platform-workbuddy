@@ -35,6 +35,7 @@ class ConfigLoader:
     """
 
     def __init__(self) -> None:
+        """从应用配置初始化配置加载器（文件系统或数据库模式）。"""
         self._settings = get_settings()
         self._base_path: str = self._settings.CONFIG_BASE_PATH
         self._mode: str = self._settings.CONFIG_MODE

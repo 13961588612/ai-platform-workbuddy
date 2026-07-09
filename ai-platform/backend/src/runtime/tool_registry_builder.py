@@ -23,6 +23,15 @@ _MCP_LOG_LIMIT = 4000
 
 
 def _clip_mcp_log(text: str, limit: int = _MCP_LOG_LIMIT) -> str:
+    """截断 MCP 工具日志输出，避免单行过长。
+
+    Args:
+        text: 原始日志文本。
+        limit: 最大保留字符数。
+
+    Returns:
+        去首尾空白并截断后的字符串。
+    """
     cleaned = (text or "").strip()
     if len(cleaned) <= limit:
         return cleaned
@@ -50,6 +59,16 @@ _JSON_TYPE_MAP: dict[str, type] = {
 
 
 def _sanitize_tool_segment(value: str) -> str:
+    """将 MCP 服务器/工具名规范为 OpenHarness 工具名安全片段。
+
+    仅保留字母、数字、下划线与连字符；若首字符非字母则加 ``mcp_`` 前缀。
+
+    Args:
+        value: 原始名称片段。
+
+    Returns:
+        可用于 ``mcp__{server}__{tool}`` 组合的合法片段。
+    """
     sanitized = re.sub(r"[^A-Za-z0-9_-]", "_", value)
     if not sanitized:
         return "tool"
@@ -103,6 +122,12 @@ class PlatformMcpToolAdapter(BaseTool):
     """MCP 工具适配器 — 修复 Pydantic v2 对 _ 开头字段名的限制。"""
 
     def __init__(self, manager: McpClientManager, tool_info: McpToolInfo) -> None:
+        """绑定 MCP 管理器与工具元数据，生成平台侧工具名与输入模型。
+
+        Args:
+            manager: 已连接的 ``McpClientManager``。
+            tool_info: MCP 工具描述（含 server、name、schema）。
+        """
         self._manager = manager
         self._tool_info = tool_info
         server_segment = _sanitize_tool_segment(tool_info.server_name)
@@ -112,6 +137,18 @@ class PlatformMcpToolAdapter(BaseTool):
         self.input_model = _input_model_from_schema(self.name, tool_info.input_schema)
 
     async def execute(self, arguments: BaseModel, context: ToolExecutionContext) -> ToolResult:
+        """调用远端 MCP 工具并将结果或错误封装为 ``ToolResult``。
+
+        带超时与连接失败处理；超时、未连接及未捕获异常均返回
+        ``is_error=True`` 的结果，不向上抛出。
+
+        Args:
+            arguments: 经 Pydantic 校验的工具入参。
+            context: OpenHarness 执行上下文（本适配器未使用）。
+
+        Returns:
+            成功时为工具输出字符串；失败时 ``is_error=True``。
+        """
         del context
         payload = arguments.model_dump(mode="json", exclude_none=True, by_alias=True)
         logger.info(
@@ -180,6 +217,14 @@ class PlatformMcpToolAdapter(BaseTool):
         return ToolResult(output=output)
 
     def is_read_only(self, arguments: BaseModel) -> bool:
+        """MCP 工具默认视为只读，不触发写操作确认。
+
+        Args:
+            arguments: 工具入参（未用于判断）。
+
+        Returns:
+            恒为 ``True``。
+        """
         return True
 
 
@@ -208,12 +253,26 @@ class SafeToolWrapper(BaseTool):
     """包装工具执行，将未捕获异常转为 ToolResult 错误，避免中断 Agent 循环。"""
 
     def __init__(self, inner: BaseTool) -> None:
+        """包装内层工具，透传名称、描述与输入模型。
+
+        Args:
+            inner: 待包装的真实 ``BaseTool`` 实现。
+        """
         self._inner = inner
         self.name = inner.name
         self.description = inner.description
         self.input_model = inner.input_model
 
     async def execute(self, arguments: BaseModel, context: ToolExecutionContext) -> ToolResult:
+        """委托内层执行，将未捕获异常转为 ``ToolResult`` 错误。
+
+        Args:
+            arguments: 工具入参。
+            context: OpenHarness 执行上下文。
+
+        Returns:
+            内层成功结果，或 ``is_error=True`` 的错误描述。
+        """
         try:
             return await self._inner.execute(arguments, context)
         except Exception as exc:
@@ -227,6 +286,14 @@ class SafeToolWrapper(BaseTool):
             return ToolResult(output=message, is_error=True)
 
     def is_read_only(self, arguments: BaseModel) -> bool:
+        """透传内层工具的只读判定。
+
+        Args:
+            arguments: 工具入参。
+
+        Returns:
+            内层 ``is_read_only`` 的返回值。
+        """
         return self._inner.is_read_only(arguments)
 
 

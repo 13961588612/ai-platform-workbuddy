@@ -76,6 +76,17 @@ class GatewayApiClient:
         user_id: str = "",
         dept: str = "",
     ) -> None:
+        """保存 LLM 网关与推理参数，供 OpenHarness API 请求路由使用。
+
+        Args:
+            gateway: 平台 ``LLMGateway`` 实例。
+            model: 默认模型名。
+            temperature: 采样温度。
+            max_tokens: 单次补全 token 上限。
+            session_id: 会话 ID，写入 ``LLMRequest`` 供计费/追踪。
+            user_id: 用户 ID。
+            dept: 部门标识。
+        """
         self._gateway = gateway
         self._model = model
         self._temperature = temperature
@@ -85,6 +96,18 @@ class GatewayApiClient:
         self._dept = dept
 
     async def stream_message(self, request: ApiMessageRequest) -> AsyncIterator[ApiStreamEvent]:
+        """将 OpenHarness ``ApiMessageRequest`` 转为平台 LLM 调用并流式返回 API 事件。
+
+        有 tools 时走非流式 ``chat`` 再模拟文本增量；无 tools 时走
+        ``chat_stream`` 逐块下发 ``ApiTextDeltaEvent``，末包为
+        ``ApiMessageCompleteEvent``（含 usage 与 stop_reason）。
+
+        Args:
+            request: OpenHarness 消息请求（消息、系统提示、tools 等）。
+
+        Yields:
+            ``ApiTextDeltaEvent`` 与最终的 ``ApiMessageCompleteEvent``。
+        """
         openai_messages = _convert_messages_to_openai(request.messages, request.system_prompt)
         llm_messages = _openai_messages_to_llm(openai_messages)
         openai_tools = _convert_tools_to_openai(request.tools) if request.tools else []

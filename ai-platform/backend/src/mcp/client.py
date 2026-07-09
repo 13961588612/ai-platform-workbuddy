@@ -33,12 +33,28 @@ class MCPClientError(Exception):
 
 
 def _tool_to_dict(tool: Any) -> dict[str, Any]:
+    """将 MCP SDK 工具对象转为 JSON 兼容的 dict。
+
+    Args:
+        tool: ``list_tools`` 返回的工具对象。
+
+    Returns:
+        工具元数据的字典表示。
+    """
     if hasattr(tool, "model_dump"):
         return tool.model_dump(mode="json", exclude_none=True)
     return dict(tool)
 
 
 def _call_result_to_dict(result: Any) -> dict[str, Any]:
+    """将 ``call_tool`` 结果转为 dict，并展平 text 内容块。
+
+    Args:
+        result: MCP SDK 的 ``CallToolResult`` 或等价对象。
+
+    Returns:
+        含 ``content`` 及可选 ``text`` 字段的结果字典。
+    """
     if hasattr(result, "model_dump"):
         data = result.model_dump(mode="json", exclude_none=True)
     else:
@@ -67,6 +83,16 @@ class MCPClient:
         env: dict[str, str] | None = None,
         timeout: float = 30.0,
     ) -> None:
+        """初始化 MCP 客户端（不建立连接）。
+
+        Args:
+            server_name: MCP Server 注册名称。
+            transport: 传输协议（stdio / http / sse）。
+            endpoint: HTTP/SSE URL 或 stdio 可执行文件路径。
+            args: stdio 模式下传递给命令的参数。
+            env: stdio 模式下的额外环境变量。
+            timeout: 连接与请求超时（秒）。
+        """
         self._server_name = server_name
         self._transport = transport
         self._endpoint = endpoint
@@ -80,10 +106,12 @@ class MCPClient:
 
     @property
     def server_name(self) -> str:
+        """MCP Server 注册名称。"""
         return self._server_name
 
     @property
     def is_connected(self) -> bool:
+        """当前是否已建立可用的 MCP 会话。"""
         return self._connected and self._session is not None
 
     async def connect(self) -> None:
@@ -111,6 +139,14 @@ class MCPClient:
             ) from exc
 
     async def _open_session(self, stack: contextlib.AsyncExitStack) -> ClientSession:
+        """按传输类型打开 MCP 传输并创建 ``ClientSession``。
+
+        Args:
+            stack: 用于托管传输上下文管理器的异步退出栈。
+
+        Returns:
+            已就绪、尚未 ``initialize`` 的 ``ClientSession``。
+        """
         if self._transport == MCPTransportType.STDIO:
             params = StdioServerParameters(
                 command=self._endpoint,

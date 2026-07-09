@@ -20,6 +20,7 @@ def make_skill_obj():
     """Factory for Skill objects used in permission tests."""
 
     def _make(skill_id="skill-1", category=SkillCategory.HR):
+        """构造权限测试用的 ``Skill`` 对象。"""
         return Skill(skill_id=skill_id, name=f"Skill {skill_id}", category=category)
 
     return _make

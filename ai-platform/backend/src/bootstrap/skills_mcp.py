@@ -21,10 +21,12 @@ _mcp_discovery: MCPDiscovery | None = None
 
 
 def get_skill_registry() -> SkillRegistry | None:
+    """返回启动时注入的全局 ``SkillRegistry``，未初始化时返回 ``None``。"""
     return _skill_registry
 
 
 def get_mcp_manager() -> MCPManager | None:
+    """返回启动时注入的全局 ``MCPManager``，未初始化时返回 ``None``。"""
     return _mcp_manager
 
 

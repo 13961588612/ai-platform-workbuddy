@@ -50,6 +50,7 @@ class LLMGateway:
     """
 
     def __init__(self) -> None:
+        """初始化 LLM Gateway 并挂载 Key、配额、代理、故障转移等子组件。"""
         self._settings = get_settings()
         self._key_manager: APIKeyManager = get_key_manager()
         self._quota_manager: QuotaManager = get_quota_manager()

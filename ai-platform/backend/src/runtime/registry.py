@@ -28,6 +28,16 @@ class RuntimeCapabilities:
         hitl: bool = True,
         stateful: bool = True,
     ) -> None:
+        """声明运行时支持的能力开关。
+
+        Args:
+            streaming: 是否支持流式输出。
+            generative_ui: 是否支持生成式 UI。
+            mcp: 是否支持 MCP 工具。
+            multi_agent: 是否支持多 Agent 协作。
+            hitl: 是否支持人机协同（HITL）。
+            stateful: 是否支持有状态会话。
+        """
         self.streaming = streaming
         self.generative_ui = generative_ui
         self.mcp = mcp
@@ -57,6 +67,14 @@ class RuntimeInfo:
         capabilities: RuntimeCapabilities,
         is_default: bool = False,
     ) -> None:
+        """构造已注册运行时的元数据记录。
+
+        Args:
+            type_name: 运行时类型标识。
+            version: 运行时版本号。
+            capabilities: 能力声明对象。
+            is_default: 是否为默认运行时类型。
+        """
         self.type = type_name
         self.version = version
         self.capabilities = capabilities
@@ -77,9 +95,17 @@ class RuntimeInfo:
 class RuntimeFactory(Protocol):
     """运行时工厂函数的协议。"""
 
-    def create(self, config: Any) -> AgentRuntime: ...
-    def validate_config(self, config: Any) -> bool: ...
-    def capabilities(self) -> RuntimeCapabilities: ...
+    def create(self, config: Any) -> AgentRuntime:
+        """根据配置创建并返回 ``AgentRuntime`` 实例。"""
+        ...
+
+    def validate_config(self, config: Any) -> bool:
+        """校验配置是否适用于本运行时类型。"""
+        ...
+
+    def capabilities(self) -> RuntimeCapabilities:
+        """返回本运行时声明的能力集。"""
+        ...
 
 
 class RuntimeRegistry:
@@ -91,6 +117,7 @@ class RuntimeRegistry:
     """
 
     def __init__(self) -> None:
+        """初始化空的运行时工厂注册表，默认类型为 ``openharness``。"""
         self._factories: dict[str, RuntimeFactory] = {}
         self._infos: dict[str, RuntimeInfo] = {}
         self._default_type: str = "openharness"

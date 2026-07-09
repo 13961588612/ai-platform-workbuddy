@@ -24,6 +24,14 @@ _TRANSPORT_ALIASES: dict[str, MCPTransportType] = {
 
 
 def _parse_transport(raw: str) -> MCPTransportType:
+    """将 YAML 中的传输类型字符串解析为 ``MCPTransportType``。
+
+    Args:
+        raw: 配置中的 transport 字段值。
+
+    Returns:
+        对应的传输枚举；未知值时回退为 HTTP 并记录警告。
+    """
     key = raw.strip().lower()
     if key not in _TRANSPORT_ALIASES:
         logger.warning("Unknown MCP transport, defaulting to http", transport=raw)
@@ -32,6 +40,14 @@ def _parse_transport(raw: str) -> MCPTransportType:
 
 
 def _parse_server(entry: dict[str, Any]) -> MCPServerConfig | None:
+    """将 YAML 条目解析为 ``MCPServerConfig``。
+
+    Args:
+        entry: ``mcp-servers.yaml`` 中的单条服务器配置。
+
+    Returns:
+        解析成功时返回配置对象；缺少 ``name`` 或 ``endpoint`` 时返回 ``None``。
+    """
     name = entry.get("name")
     endpoint = entry.get("endpoint", "")
     if not name:

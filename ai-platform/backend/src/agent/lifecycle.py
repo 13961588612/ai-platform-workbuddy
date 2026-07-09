@@ -72,6 +72,11 @@ class LifecycleStateMachine:
     """
 
     def __init__(self, initial_state: InstanceState = InstanceState.CREATED) -> None:
+        """初始化生命周期状态机。
+
+        Args:
+            initial_state: 实例的初始生命周期状态。
+        """
         self._current_state: InstanceState = initial_state
         self._hooks: dict[str, list[Callable[[InstanceState, InstanceState], None]]] = {
             "before_transition": [],

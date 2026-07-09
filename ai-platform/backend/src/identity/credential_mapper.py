@@ -28,6 +28,11 @@ class CredentialMapper:
     """解析 (user_id, system_type) → (account, credential) 映射。"""
 
     def __init__(self, vault: CredentialVault | None = None) -> None:
+        """初始化凭据映射器。
+
+        Args:
+            vault: 加密凭据存储；未提供时使用默认 ``CredentialVault``。
+        """
         self._vault = vault or CredentialVault()
 
     async def get_credential(

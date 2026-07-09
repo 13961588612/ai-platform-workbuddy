@@ -39,6 +39,7 @@ class AgentRouter:
     """
 
     def __init__(self) -> None:
+        """初始化路由器并按优先级注册四级策略链。"""
         self._strategies: list[RoutingStrategy] = [
             SessionAffinityStrategy(),
             KeywordMatchStrategy(),

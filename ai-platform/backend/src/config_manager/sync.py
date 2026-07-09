@@ -36,6 +36,7 @@ class ConfigSync:
     """
 
     def __init__(self) -> None:
+        """从应用配置初始化双向同步器。"""
         self._settings = get_settings()
         self._base_path: str = self._settings.CONFIG_BASE_PATH
 

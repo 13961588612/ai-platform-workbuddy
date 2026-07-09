@@ -30,6 +30,12 @@ class _CachedStaticMemory:
     __slots__ = ("content", "mtime")
 
     def __init__(self, content: str, mtime: float) -> None:
+        """创建静态记忆缓存条目。
+
+        Args:
+            content: 组装后的静态记忆文本。
+            mtime: 源文件最大修改时间（用于热重载检测）。
+        """
         self.content: str = content
         self.mtime: float = mtime
 
@@ -52,6 +58,7 @@ class StaticMemoryLoader:
     """
 
     def __init__(self) -> None:
+        """从配置初始化静态记忆加载器（按 agent 名称缓存）。"""
         self._settings = get_settings()
         self._base_path: str = self._settings.CONFIG_BASE_PATH
         # agent_name -> _CachedStaticMemory

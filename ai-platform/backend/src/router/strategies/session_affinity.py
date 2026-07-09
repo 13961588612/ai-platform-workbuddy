@@ -27,15 +27,18 @@ class SessionAffinityStrategy(RoutingStrategy):
     """
 
     def __init__(self) -> None:
+        """初始化会话亲和策略（Redis 连接懒创建）。"""
         self._redis: aioredis.Redis | None = None
         self._settings = get_settings()
 
     @property
     def name(self) -> str:
+        """策略标识符：``session_affinity``。"""
         return "session_affinity"
 
     @property
     def priority(self) -> int:
+        """策略优先级（1 = 最高，最先尝试）。"""
         return 1
 
     async def _get_redis(self) -> aioredis.Redis:

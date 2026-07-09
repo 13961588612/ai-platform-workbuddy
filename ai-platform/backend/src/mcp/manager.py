@@ -41,6 +41,7 @@ class MCPManager:
     """管理所有 MCP Server 连接。"""
 
     def __init__(self) -> None:
+        """初始化 MCP 管理器（空注册表，无活跃连接）。"""
         self._configs: dict[str, MCPServerConfig] = {}
         self._clients: dict[str, MCPClient] = {}
 

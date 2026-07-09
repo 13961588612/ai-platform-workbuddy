@@ -31,6 +31,11 @@ class HotSkillCache:
     """Skills 子系统的多层 Redis 缓存。"""
 
     def __init__(self, redis_client: aioredis.Redis | None = None) -> None:
+        """初始化 Redis 多层 Skill 缓存。
+
+        Args:
+            redis_client: 可选的 Redis 客户端；未提供时按配置自动创建。
+        """
         self._settings = get_settings()
         self._redis: aioredis.Redis = redis_client or aioredis.from_url(
             self._settings.redis_url,
@@ -47,6 +52,15 @@ class HotSkillCache:
 
     @staticmethod
     def _query_hash(query: str, categories: list[str] | None = None) -> str:
+        """为查询与分类组合生成 SHA-256 缓存键。
+
+        Args:
+            query: 用户自然语言查询。
+            categories: 可选的分类过滤列表。
+
+        Returns:
+            十六进制哈希字符串，用作 Redis 键后缀。
+        """
         raw = f"{query}:{','.join(categories or [])}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -70,6 +84,14 @@ class HotSkillCache:
         categories: list[str] | None = None,
         ttl: int | None = None,
     ) -> None:
+        """将 Top-N 查询结果写入 Redis 缓存。
+
+        Args:
+            query: 用户自然语言查询。
+            results: 待缓存的 ``SkillScore`` 列表。
+            categories: 可选的分类过滤列表。
+            ttl: 覆盖默认 TTL（秒）；``None`` 时使用实例配置。
+        """
         key = f"skill:query:{self._query_hash(query, categories)}"
         payload = json.dumps(
             [r.model_dump(mode="json") for r in results], ensure_ascii=False
@@ -88,6 +110,12 @@ class HotSkillCache:
         return Skill.model_validate_json(raw)
 
     async def set_skill(self, skill: Skill, ttl: int | None = None) -> None:
+        """将 Skill 元数据写入 Redis 元数据缓存。
+
+        Args:
+            skill: 待缓存的 Skill 对象。
+            ttl: 覆盖默认 TTL（秒）；``None`` 时使用实例配置。
+        """
         await self._redis.set(
             f"skill:meta:{skill.skill_id}",
             skill.model_dump_json(),
@@ -104,6 +132,14 @@ class HotSkillCache:
     # ---- Schema 缓存 ----
 
     async def get_schema(self, skill_id: str) -> dict[str, Any] | None:
+        """返回缓存的 Skill JSON Schema，未命中时返回 ``None``。
+
+        Args:
+            skill_id: Skill 唯一标识。
+
+        Returns:
+            Schema 字典，或 ``None``。
+        """
         raw = await self._redis.get(f"skill_schema:{skill_id}")
         if raw is None:
             return None
@@ -112,6 +148,13 @@ class HotSkillCache:
     async def set_schema(
         self, skill_id: str, schema: dict[str, Any], ttl: int | None = None
     ) -> None:
+        """将 Skill JSON Schema 写入 Redis 缓存。
+
+        Args:
+            skill_id: Skill 唯一标识。
+            schema: JSON Schema 字典。
+            ttl: 覆盖默认 TTL（秒）；``None`` 时使用实例配置。
+        """
         await self._redis.set(
             f"skill_schema:{skill_id}",
             json.dumps(schema, ensure_ascii=False),

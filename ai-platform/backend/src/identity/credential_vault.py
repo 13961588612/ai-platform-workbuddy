@@ -27,6 +27,7 @@ class CredentialVault:
     """管理加密的业务系统凭据存储。"""
 
     def __init__(self) -> None:
+        """初始化凭据保险库（加密密钥从 ``crypto`` 模块读取配置）。"""
         pass  # 密钥从 crypto.py 内部的 settings 中获取
 
     async def store_credential(

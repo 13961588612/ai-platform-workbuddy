@@ -32,6 +32,12 @@ class AgentInstance:
     """
 
     def __init__(self, config: AgentConfig, runtime: AgentRuntime) -> None:
+        """创建 Agent 实例包装（状态为 CREATED，运行时待初始化）。
+
+        Args:
+            config: Agent 配置。
+            runtime: 与此实例绑定的运行时实现。
+        """
         self.id: str = config.agent_id
         self.config: AgentConfig = config
         self.runtime: AgentRuntime = runtime
@@ -115,6 +121,7 @@ class AgentManager:
     """
 
     def __init__(self) -> None:
+        """初始化 Agent 管理器（空实例表）。"""
         self._instances: dict[str, AgentInstance] = {}
         self._runtime_registry = get_runtime_registry()
         self._llm_gateway: Any = None

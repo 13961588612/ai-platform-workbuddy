@@ -16,6 +16,12 @@ class PropertyAdapter(BusinessSystemAdapter):
     """物业管理系统的适配器。"""
 
     def __init__(self, base_url: str = "", timeout: float = 30.0) -> None:
+        """初始化物业适配器并注册报修、巡检、能耗等工具。
+
+        Args:
+            base_url: 物业后端 API 基础 URL。
+            timeout: HTTP 请求超时时间（秒）。
+        """
         super().__init__(
             system_type="property",
             base_url=base_url,
@@ -23,6 +29,7 @@ class PropertyAdapter(BusinessSystemAdapter):
         )
 
     def _define_tools(self) -> None:
+        """注册物业报修、巡检、能耗、安防、停车等 MCP 工具定义。"""
         self._tools = [
             ToolDefinition(
                 name="create_repair_request",
@@ -136,6 +143,16 @@ class PropertyAdapter(BusinessSystemAdapter):
         arguments: dict[str, Any],
         credential: dict[str, Any] | None,
     ) -> ToolResult:
+        """将物业工具调用路由到对应的后端 HTTP 接口。
+
+        Args:
+            tool_name: 要执行的工具名称。
+            arguments: 工具参数字典。
+            credential: 解密后的后端认证凭据。
+
+        Returns:
+            包含物业 API 响应数据或错误信息的 ``ToolResult``。
+        """
         get_tools = {
             "query_repair_status": "/api/repairs",
             "query_inspection_records": "/api/inspections",

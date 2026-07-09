@@ -30,6 +30,12 @@ class VectorIndexer:
         qdrant_client: AsyncQdrantClient | None = None,
         embedding_url: str | None = None,
     ) -> None:
+        """初始化 Qdrant 向量索引器。
+
+        Args:
+            qdrant_client: 可选的 Qdrant 异步客户端。
+            embedding_url: 可选的 Embedding 服务根 URL。
+        """
         self._settings = get_settings()
         self._qdrant: AsyncQdrantClient = qdrant_client or AsyncQdrantClient(
             url=self._settings.qdrant_url,

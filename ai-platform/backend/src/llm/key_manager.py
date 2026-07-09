@@ -28,6 +28,7 @@ class APIKeyManager:
     """
 
     def __init__(self) -> None:
+        """初始化各 Provider 的 API Key 池与轮询索引。"""
         self._keys: dict[str, list[APIKey]] = {}
         self._rotation_index: dict[str, int] = {}
         self._lock = threading.Lock()

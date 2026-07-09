@@ -38,6 +38,7 @@ class InboundStreamWorker:
     """消费 stream:agent:{agentId} 与 stream:inbound:{channel}。"""
 
     def __init__(self) -> None:
+        """初始化 Redis 连接占位、并发控制与 session 级串行锁。"""
         self._settings = get_settings()
         self._redis: aioredis.Redis | None = None
         self._producer: StreamProducer | None = None
@@ -53,6 +54,11 @@ class InboundStreamWorker:
         self._inflight: set[asyncio.Task[None]] = set()
 
     async def _get_redis(self) -> aioredis.Redis:
+        """懒创建 Redis 异步客户端；``socket_timeout`` 须大于 XREADGROUP 阻塞时长。
+
+        Returns:
+            已配置的 ``redis.asyncio.Redis`` 实例。
+        """
         if self._redis is None:
             # socket_timeout 须大于 XREADGROUP block，否则空闲等待会被误判为读超时
             self._redis = aioredis.from_url(
@@ -65,6 +71,14 @@ class InboundStreamWorker:
         return self._redis
 
     def _resolve_stream_keys(self, agent_ids: list[str]) -> list[str]:
+        """根据 Agent ID 与默认渠道拼接入站 stream 键名列表。
+
+        Args:
+            agent_ids: 需订阅的 Agent 实例 ID 列表。
+
+        Returns:
+            去重并排序后的 stream key 列表。
+        """
         keys: list[str] = []
         for agent_id in agent_ids:
             keys.append(StreamKeys.agent_inbound(agent_id))
@@ -73,6 +87,14 @@ class InboundStreamWorker:
         return sorted(set(keys))
 
     async def _get_session_lock(self, session_id: str) -> asyncio.Lock:
+        """获取或创建指定 session 的互斥锁，保证同会话消息串行处理。
+
+        Args:
+            session_id: 会话 ID。
+
+        Returns:
+            该 session 专用的 ``asyncio.Lock``。
+        """
         async with self._session_locks_guard:
             lock = self._session_locks.get(session_id)
             if lock is None:
@@ -81,6 +103,11 @@ class InboundStreamWorker:
             return lock
 
     async def start(self, agent_ids: list[str] | None = None) -> None:
+        """创建消费者组、启动 XREADGROUP 消费循环。
+
+        Args:
+            agent_ids: 要订阅的 Agent ID；为 ``None`` 时使用当前已注册的全部 Agent。
+        """
         if self._running:
             return
 
@@ -111,6 +138,7 @@ class InboundStreamWorker:
         )
 
     async def stop(self) -> None:
+        """停止消费循环、取消在飞任务并关闭 Redis 连接。"""
         self._running = False
         if self._task is not None:
             self._task.cancel()
@@ -149,6 +177,13 @@ class InboundStreamWorker:
         message_id: str,
         inbound: InboundStreamMessage,
     ) -> None:
+        """为单条入站消息创建异步处理任务并注册完成回调。
+
+        Args:
+            stream_key: Redis stream 键名。
+            message_id: Redis 消息 ID。
+            inbound: 解析后的入站消息体。
+        """
         task = asyncio.create_task(
             self._handle_message(stream_key, message_id, inbound),
             name=f"inbound-{inbound.session_id}-{message_id}",
@@ -156,6 +191,7 @@ class InboundStreamWorker:
         self._inflight.add(task)
 
         def _on_done(done: asyncio.Task[None]) -> None:
+            """任务结束时从在飞集合移除，并记录未捕获异常。"""
             self._inflight.discard(done)
             if done.cancelled():
                 return
@@ -172,6 +208,7 @@ class InboundStreamWorker:
         task.add_done_callback(_on_done)
 
     async def _consume_loop(self) -> None:
+        """主消费循环：背压控制下 XREADGROUP 拉取并分发入站消息。"""
         redis = await self._get_redis()
         while self._running:
             try:
@@ -243,6 +280,15 @@ class InboundStreamWorker:
         inbound: InboundStreamMessage,
         stream_key: str,
     ) -> None:
+        """解析入站消息、写入会话、驱动 Agent 并将事件发布到出站 stream。
+
+        处理会话/Agent 不存在、超时及运行时错误，必要时通过
+        ``_publish_error`` 下发错误事件。
+
+        Args:
+            inbound: Gateway 写入的入站消息。
+            stream_key: 消息来源 stream 键名（用于推断 ``agent_id``）。
+        """
         if not inbound.content.strip():
             logger.debug("Skip empty inbound message", session_id=inbound.session_id)
             return
@@ -377,6 +423,15 @@ class InboundStreamWorker:
         error_code: str,
         message: str,
     ) -> None:
+        """向出站 stream 发布错误事件并紧跟 ``done`` 事件。
+
+        Args:
+            producer: 出站 ``StreamProducer``。
+            inbound: 原始入站消息（用于 session/user/channel/trace）。
+            agent_id: 关联的 Agent ID。
+            error_code: 平台错误码。
+            message: 用户可见错误说明。
+        """
         from src.runtime.events import AgentEvent
 
         await producer.publish_agent_event(
@@ -398,6 +453,7 @@ class InboundStreamWorker:
 
 
 def get_inbound_stream_worker() -> InboundStreamWorker:
+    """返回进程内单例 ``InboundStreamWorker``。"""
     global _worker
     if _worker is None:
         _worker = InboundStreamWorker()
@@ -405,6 +461,11 @@ def get_inbound_stream_worker() -> InboundStreamWorker:
 
 
 async def start_inbound_stream_worker(agent_ids: list[str] | None = None) -> None:
+    """按配置启动入站 stream 消费者；``STREAM_CONSUMER_ENABLED=False`` 时跳过。
+
+    Args:
+        agent_ids: 要订阅的 Agent ID 列表；为 ``None`` 时使用全部已注册 Agent。
+    """
     settings = get_settings()
     if not settings.STREAM_CONSUMER_ENABLED:
         logger.info("Inbound stream worker disabled by config")
@@ -413,5 +474,6 @@ async def start_inbound_stream_worker(agent_ids: list[str] | None = None) -> Non
 
 
 async def stop_inbound_stream_worker() -> None:
+    """停止已创建的入站 stream 消费者（若存在）。"""
     if _worker is not None:
         await _worker.stop()

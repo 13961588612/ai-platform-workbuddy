@@ -41,6 +41,7 @@ class WeComClient:
     """用于 OAuth2 和组织架构同步的极简企业微信 API 客户端。"""
 
     def __init__(self) -> None:
+        """从应用配置初始化企业微信 API 客户端。"""
         self._settings = get_settings()
         self._corp_id = self._settings.WECOM_CORP_ID
         self._secret = self._settings.WECOM_SECRET
@@ -143,6 +144,12 @@ class AuthService:
         token_manager: TokenManager | None = None,
         wecom_client: WeComClient | None = None,
     ) -> None:
+        """初始化认证服务门面。
+
+        Args:
+            token_manager: JWT 签发与校验管理器；未提供时使用默认单例。
+            wecom_client: 企业微信 API 客户端；未提供时使用默认实例。
+        """
         self._token_manager = token_manager or TokenManager()
         self._wecom = wecom_client or WeComClient()
         self._settings = get_settings()

@@ -16,6 +16,12 @@ class RetailAdapter(BusinessSystemAdapter):
     """超市/零售管理系统的适配器。"""
 
     def __init__(self, base_url: str = "", timeout: float = 30.0) -> None:
+        """初始化零售适配器并注册商品、库存、促销等工具。
+
+        Args:
+            base_url: 零售后端 API 基础 URL。
+            timeout: HTTP 请求超时时间（秒）。
+        """
         super().__init__(
             system_type="retail",
             base_url=base_url,
@@ -23,6 +29,7 @@ class RetailAdapter(BusinessSystemAdapter):
         )
 
     def _define_tools(self) -> None:
+        """注册零售商品、库存、促销、销售报表、采购等 MCP 工具定义。"""
         self._tools = [
             ToolDefinition(
                 name="query_products",
@@ -124,6 +131,16 @@ class RetailAdapter(BusinessSystemAdapter):
         arguments: dict[str, Any],
         credential: dict[str, Any] | None,
     ) -> ToolResult:
+        """将零售工具调用路由到对应的后端 HTTP 接口。
+
+        Args:
+            tool_name: 要执行的工具名称。
+            arguments: 工具参数字典。
+            credential: 解密后的后端认证凭据。
+
+        Returns:
+            包含零售 API 响应数据或错误信息的 ``ToolResult``。
+        """
         if tool_name == "query_products":
             data = await self._http_request("GET", "/api/products", credential, params=arguments)
             return ToolResult(success=True, data=data)

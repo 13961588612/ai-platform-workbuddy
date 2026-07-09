@@ -16,6 +16,12 @@ class HRAdapter(BusinessSystemAdapter):
     """HR（人力资源）系统的适配器。"""
 
     def __init__(self, base_url: str = "", timeout: float = 30.0) -> None:
+        """初始化 HR 适配器并注册请假、薪资、考勤等工具。
+
+        Args:
+            base_url: HR 后端 API 基础 URL。
+            timeout: HTTP 请求超时时间（秒）。
+        """
         super().__init__(
             system_type="hr",
             base_url=base_url,
@@ -23,6 +29,7 @@ class HRAdapter(BusinessSystemAdapter):
         )
 
     def _define_tools(self) -> None:
+        """注册 HR 请假、薪资、组织架构、考勤、绩效等 MCP 工具定义。"""
         self._tools = [
             ToolDefinition(
                 name="query_leave_balance",
@@ -141,6 +148,16 @@ class HRAdapter(BusinessSystemAdapter):
         arguments: dict[str, Any],
         credential: dict[str, Any] | None,
     ) -> ToolResult:
+        """将 HR 工具调用路由到对应的后端 HTTP 接口。
+
+        Args:
+            tool_name: 要执行的工具名称。
+            arguments: 工具参数字典。
+            credential: 解密后的后端认证凭据。
+
+        Returns:
+            包含 HR API 响应数据或错误信息的 ``ToolResult``。
+        """
         get_tools = {
             "query_leave_balance": "/api/leave/balance",
             "query_salary_slip": "/api/salary/slip",

@@ -49,6 +49,14 @@ def _mask_sensitive_data(
 
 
 def _build_processors(use_json: bool) -> list[Any]:
+    """组装 structlog 处理器链（含脱敏与渲染器）。
+
+    Args:
+        use_json: 为 ``True`` 时使用 JSON 渲染；否则使用控制台渲染。
+
+    Returns:
+        按执行顺序排列的 structlog 处理器列表。
+    """
     processors: list[Any] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_logger_name,
@@ -67,6 +75,14 @@ def _build_processors(use_json: bool) -> list[Any]:
 
 
 def _resolve_log_path(log_file: str) -> Path:
+    """将日志文件路径解析为绝对 ``Path``。
+
+    Args:
+        log_file: 配置中的日志文件路径（相对或绝对）。
+
+    Returns:
+        绝对路径对象。
+    """
     path = Path(log_file)
     if not path.is_absolute():
         path = Path.cwd() / path
@@ -74,6 +90,15 @@ def _resolve_log_path(log_file: str) -> Path:
 
 
 def _has_file_handler(root: logging.Logger, log_path: Path) -> bool:
+    """检查 root logger 是否已挂载指向同一文件的轮转 Handler。
+
+    Args:
+        root: Python 标准库 root logger。
+        log_path: 目标日志文件的绝对路径。
+
+    Returns:
+        若已存在指向该文件的 ``RotatingFileHandler`` 则返回 ``True``。
+    """
     target = log_path.resolve()
     for handler in root.handlers:
         if isinstance(handler, RotatingFileHandler):

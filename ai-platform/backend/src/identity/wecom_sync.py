@@ -31,6 +31,11 @@ class WeComOrgSync:
         self,
         wecom_client: WeComClient | None = None,
     ) -> None:
+        """初始化企业微信组织架构同步器。
+
+        Args:
+            wecom_client: 企业微信 API 客户端；未提供时使用默认实例。
+        """
         self._wecom = wecom_client or WeComClient()
         self._last_sync_at: datetime | None = None
 

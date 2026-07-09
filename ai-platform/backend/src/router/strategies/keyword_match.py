@@ -25,10 +25,12 @@ class KeywordMatchStrategy(RoutingStrategy):
 
     @property
     def name(self) -> str:
+        """策略标识符：``keyword_matching``。"""
         return "keyword_matching"
 
     @property
     def priority(self) -> int:
+        """策略优先级（2 = 会话亲和之后）。"""
         return 2
 
     async def route(

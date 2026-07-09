@@ -52,6 +52,7 @@ def make_skill():
         last_called_at=None,
         priority: float = 1.0,
     ):
+        """按给定字段构造用于测试的 ``Skill`` 实例。"""
         return Skill(
             skill_id=skill_id,
             name=name,
@@ -79,6 +80,7 @@ def make_user():
         skill_allow_list: list[str] | None = None,
         skill_deny_list: list[str] | None = None,
     ):
+        """按给定字段构造用于测试的 ``UserContext`` 实例。"""
         return UserContext(
             user_id=user_id,
             username=username,

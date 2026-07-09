@@ -144,6 +144,7 @@ class TestRefreshTokenSet:
         class PastDateTime(datetime):
             @classmethod
             def now(cls, tz=None):
+                """返回固定的过去时间，用于制造不同的 JWT iat/exp。"""
                 return past
 
         with patch("src.identity.token.datetime", PastDateTime):

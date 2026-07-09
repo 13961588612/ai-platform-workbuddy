@@ -90,6 +90,12 @@ class MemoryManager:
         static_loader: StaticMemoryLoader | None = None,
         qdrant_client: AsyncQdrantClient | None = None,
     ) -> None:
+        """初始化记忆管理器。
+
+        Args:
+            static_loader: 静态记忆加载器；未提供时使用全局单例。
+            qdrant_client: Qdrant 异步客户端；未提供时按配置创建。
+        """
         self._settings = get_settings()
         self._static_loader: StaticMemoryLoader = static_loader or get_static_memory_loader()
         self._qdrant: AsyncQdrantClient = qdrant_client or AsyncQdrantClient(

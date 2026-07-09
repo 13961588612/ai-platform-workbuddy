@@ -16,6 +16,12 @@ class FinanceAdapter(BusinessSystemAdapter):
     """财务业务系统的适配器。"""
 
     def __init__(self, base_url: str = "", timeout: float = 30.0) -> None:
+        """初始化财务适配器并注册报销、预算、报表等工具。
+
+        Args:
+            base_url: 财务后端 API 基础 URL。
+            timeout: HTTP 请求超时时间（秒）。
+        """
         super().__init__(
             system_type="finance",
             base_url=base_url,
@@ -23,6 +29,7 @@ class FinanceAdapter(BusinessSystemAdapter):
         )
 
     def _define_tools(self) -> None:
+        """注册财务报销、预算、报表、发票、对账等 MCP 工具定义。"""
         self._tools = [
             ToolDefinition(
                 name="query_expense_reports",
@@ -128,6 +135,16 @@ class FinanceAdapter(BusinessSystemAdapter):
         arguments: dict[str, Any],
         credential: dict[str, Any] | None,
     ) -> ToolResult:
+        """将财务工具调用路由到对应的后端 HTTP 接口。
+
+        Args:
+            tool_name: 要执行的工具名称。
+            arguments: 工具参数字典。
+            credential: 解密后的后端认证凭据。
+
+        Returns:
+            包含财务 API 响应数据或错误信息的 ``ToolResult``。
+        """
         if tool_name == "query_expense_reports":
             data = await self._http_request(
                 "GET", "/api/expense-reports", credential, params=arguments

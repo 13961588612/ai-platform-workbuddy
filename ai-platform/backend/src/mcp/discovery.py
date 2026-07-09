@@ -45,6 +45,12 @@ class MCPDiscovery:
         manager: MCPManager,
         registry: SkillRegistry | None = None,
     ) -> None:
+        """初始化 MCP 工具发现器。
+
+        Args:
+            manager: 用于 ``list_tools`` 的 MCP 连接管理器。
+            registry: 可选的 Skill 注册表；未设置时无法注册发现的工具。
+        """
         self._manager = manager
         self._registry = registry
 

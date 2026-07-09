@@ -42,6 +42,7 @@ class QuotaManager:
     """
 
     def __init__(self) -> None:
+        """初始化 token 配额管理器（Redis 连接懒创建）。"""
         self._settings = get_settings()
         self._redis: aioredis.Redis | None = None
         self._default_user_limit = 100_000

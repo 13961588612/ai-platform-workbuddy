@@ -40,6 +40,12 @@ class SkillRanker:
         permission_engine: PermissionEngine | None = None,
         default_top_k: int = 5,
     ) -> None:
+        """初始化 Skill 第二阶段排序器。
+
+        Args:
+            permission_engine: 可选的权限引擎，用于过滤候选 Skill。
+            default_top_k: 未触发动态 K 时的默认返回数量。
+        """
         self._permission_engine = permission_engine
         self._default_top_k = default_top_k
 

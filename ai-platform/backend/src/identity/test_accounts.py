@@ -29,10 +29,12 @@ class TestAccountStore:
     """从 YAML 加载测试账号，仅在 DEV_TEST_ACCOUNTS_ENABLED 时可用。"""
 
     def __init__(self) -> None:
+        """初始化测试账号存储并从 YAML 加载（若已启用）。"""
         self._by_username: dict[str, TestAccount] = {}
         self._reload()
 
     def _reload(self) -> None:
+        """从配置路径重新加载测试账号 YAML 到内存索引。"""
         self._by_username.clear()
         settings = get_settings()
         if not settings.DEV_TEST_ACCOUNTS_ENABLED:
@@ -70,9 +72,19 @@ class TestAccountStore:
         )
 
     def is_enabled(self) -> bool:
+        """开发测试账号功能是否已启用且已加载至少一条账号。"""
         return get_settings().DEV_TEST_ACCOUNTS_ENABLED and bool(self._by_username)
 
     def authenticate(self, username: str, password: str) -> TestAccount | None:
+        """校验用户名与密码，成功时返回测试账号。
+
+        Args:
+            username: 登录用户名。
+            password: 明文密码（与 YAML 中配置比对）。
+
+        Returns:
+            匹配的 ``TestAccount``；未启用、用户不存在或密码错误时返回 ``None``。
+        """
         if not get_settings().DEV_TEST_ACCOUNTS_ENABLED:
             return None
         account = self._by_username.get(username)
@@ -85,6 +97,7 @@ _test_account_store: TestAccountStore | None = None
 
 
 def get_test_account_store() -> TestAccountStore:
+    """返回单例 ``TestAccountStore`` 实例。"""
     global _test_account_store
     if _test_account_store is None:
         _test_account_store = TestAccountStore()

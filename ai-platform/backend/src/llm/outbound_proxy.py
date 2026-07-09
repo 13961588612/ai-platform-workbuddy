@@ -49,6 +49,7 @@ class OutboundProxyManager:
     ]
 
     def __init__(self) -> None:
+        """从应用配置初始化出口代理池（Squid 节点与健康检查）。"""
         self._settings = get_settings()
         self._proxy_pool: list[ProxyNode] = []
         self._current_index: int = 0

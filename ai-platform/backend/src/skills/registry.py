@@ -35,6 +35,12 @@ class SkillRegistry:
         indexer: VectorIndexer | None = None,
         cache: HotSkillCache | None = None,
     ) -> None:
+        """初始化 Skill 中央注册表。
+
+        Args:
+            indexer: 可选的 Qdrant 向量索引器，注册时自动建索引。
+            cache: 可选的 Redis 热缓存，注册时同步元数据。
+        """
         self._skills: dict[str, Skill] = {}
         self._indexer = indexer
         self._cache = cache

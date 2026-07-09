@@ -47,6 +47,16 @@ def set_discovery(discovery: Any) -> None:
 
 
 def _api_response(code: int, data: Any, message: str) -> dict[str, Any]:
+    """组装统一的 MCP API JSON 响应体。
+
+    Args:
+        code: 业务状态码（``0`` 表示成功）。
+        data: 响应载荷。
+        message: 人类可读说明。
+
+    Returns:
+        含 ``code``、``data``、``message``、``traceId`` 的字典。
+    """
     return {
         "code": code,
         "data": data,

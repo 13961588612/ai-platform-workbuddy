@@ -1,0 +1,59 @@
+---
+description: backend Python 代码中所有变量必须显式标注类型
+globs: ai-platform/backend/**/*.py
+alwaysApply: false
+---
+
+# Backend：变量必须写明类型
+
+在 `ai-platform/backend` 下编写或修改 Python 代码时，**所有变量**（含局部变量、循环变量、类属性、实例属性）必须使用显式类型注解。与现有 `pyproject.toml` 中 mypy `strict = true` / `disallow_untyped_defs = true` 对齐。
+
+## 必须遵守
+
+- 局部赋值：`name: str = "..."`，不要写无注解的 `name = "..."`
+- 可变容器：写明元素类型，如 `items: list[str] = []`、`mapping: dict[str, int] = {}`
+- 可空：用 `T | None`，不要省略
+- `for` / 解包：在赋值处或上方用注解标明元素类型（必要时用 `cast` / 中间变量）
+- 函数参数与返回值：全部注解；禁止无类型的 `def f(x): ...`
+- 类属性 / 实例属性：在类体或 `__init__` 中写明类型
+- 优先具体类型；仅在边界/动态 SDK 对象无法精确描述时才用 `Any`，并尽量收窄
+
+## 示例
+
+```python
+# ❌ BAD
+count = 0
+items = []
+result = await fetch()
+for item in items:
+    ...
+
+# ✅ GOOD
+count: int = 0
+items: list[str] = []
+result: LLMResponse = await fetch()
+for item in items:  # items 已是 list[str]，item 类型由容器推断且容器已注解
+    name: str = item
+```
+
+```python
+# ❌ BAD
+def build_payload(data):
+    payload = {"id": data["id"]}
+    return payload
+
+# ✅ GOOD
+def build_payload(data: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {"id": data["id"]}
+    return payload
+```
+
+## 例外（尽量少用）
+
+- `from __future__ import annotations` 下的前向引用写法允许
+- 推导式内的隐式循环变量可不单独注解，但推导式结果变量必须注解
+- 测试里对第三方 mock 对象，可用 `Any`，但赋值仍应写成 `mock_client: Any = ...`
+
+## 修改现有代码时
+
+触及某函数/模块时，顺手补全该处缺失的变量与签名类型注解，不要留下新的无类型赋值。

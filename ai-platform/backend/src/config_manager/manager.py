@@ -40,6 +40,7 @@ class ConfigManager:
     """
 
     def __init__(self) -> None:
+        """初始化配置管理编排器（子组件与内存缓存）。"""
         self._settings = get_settings()
         self._mode: str = self._settings.CONFIG_MODE
         self._loader: ConfigLoader = get_config_loader()

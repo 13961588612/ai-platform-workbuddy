@@ -57,6 +57,7 @@ class SkillGrouper:
     """按分类对 Skills 进行分组，并计算检索过滤提示。"""
 
     def __init__(self) -> None:
+        """初始化分组器（各分类 Skill 计数为空）。"""
         self._category_counts: dict[str, int] = {}
 
     def update_counts(self, skills: list[Skill]) -> None:

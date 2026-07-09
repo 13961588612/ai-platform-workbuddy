@@ -24,6 +24,14 @@ logger = get_logger("skills.loader")
 
 
 def _parse_source(raw: str) -> SkillSource:
+    """将 YAML 中的 source 字符串解析为 ``SkillSource`` 枚举。
+
+    Args:
+        raw: Front Matter 中的 source 字段值。
+
+    Returns:
+        对应的 ``SkillSource``；无法识别时返回 ``CUSTOM``。
+    """
     key = raw.lower()
     if key == "mcp":
         return SkillSource.MCP
@@ -35,6 +43,14 @@ def _parse_source(raw: str) -> SkillSource:
 
 
 def _parse_status(raw: str) -> SkillStatus:
+    """将 YAML 中的 status 字符串解析为 ``SkillStatus`` 枚举。
+
+    Args:
+        raw: Front Matter 中的 status 字段值。
+
+    Returns:
+        对应的 ``SkillStatus``；无法识别时返回 ``ACTIVE``。
+    """
     key = raw.lower()
     if key == "inactive":
         return SkillStatus.INACTIVE

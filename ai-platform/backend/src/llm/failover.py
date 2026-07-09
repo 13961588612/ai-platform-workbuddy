@@ -34,6 +34,7 @@ class FailoverManager:
     """
 
     def __init__(self) -> None:
+        """从应用配置初始化主备 Provider 故障转移状态。"""
         self._settings = get_settings()
         self._config = FailoverConfig(
             primary=self._settings.LLM_PRIMARY_PROVIDER,

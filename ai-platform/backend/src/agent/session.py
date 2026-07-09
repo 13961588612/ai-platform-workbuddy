@@ -38,6 +38,13 @@ class Message:
         content: str,
         metadata: dict[str, Any] | None = None,
     ) -> None:
+        """构造一条会话消息。
+
+        Args:
+            role: 消息角色（如 ``user``、``assistant``）。
+            content: 消息正文。
+            metadata: 可选的附加元数据。
+        """
         self.id: str = str(uuid.uuid4())
         self.role = role
         self.content = content
@@ -79,6 +86,15 @@ class Session:
         channel: str,
         runtime_type: str = "openharness",
     ) -> None:
+        """构造会话对象（尚未持久化）。
+
+        Args:
+            session_id: 渠道规范化的会话 ID。
+            agent_id: 绑定的 Agent ID。
+            user_id: 用户 ID。
+            channel: 接入渠道（web / wecom_h5 / wecom_bot 等）。
+            runtime_type: 运行时类型标识。
+        """
         self.session_id = session_id
         self.agent_id = agent_id
         self.user_id = user_id
@@ -124,6 +140,7 @@ class SessionManager:
     """
 
     def __init__(self) -> None:
+        """初始化会话管理器（Redis 连接懒创建）。"""
         self._redis: aioredis.Redis | None = None
         self._settings = get_settings()
         self._session_ttl = 86400  # 24 小时

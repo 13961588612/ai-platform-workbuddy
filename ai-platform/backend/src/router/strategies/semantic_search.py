@@ -33,6 +33,7 @@ class SemanticSearchStrategy(RoutingStrategy):
     """
 
     def __init__(self) -> None:
+        """从配置初始化 Qdrant 与 Embedding 服务连接参数。"""
         self._settings = get_settings()
         self._qdrant: QdrantClient | None = None
         self._embedding_url: str = self._settings.EMBEDDING_SERVICE_URL
@@ -41,10 +42,12 @@ class SemanticSearchStrategy(RoutingStrategy):
 
     @property
     def name(self) -> str:
+        """策略标识符：``semantic_retrieval``。"""
         return "semantic_retrieval"
 
     @property
     def priority(self) -> int:
+        """策略优先级（3 = 关键词匹配之后）。"""
         return 3
 
     def _get_qdrant(self) -> QdrantClient:

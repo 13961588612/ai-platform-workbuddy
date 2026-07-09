@@ -124,6 +124,11 @@ class MemoryInjector:
         self,
         memory_manager: MemoryManager | None = None,
     ) -> None:
+        """初始化记忆注入中间件。
+
+        Args:
+            memory_manager: 记忆读写编排器；未提供时使用全局单例。
+        """
         self._settings = get_settings()
         self._memory_manager: MemoryManager = memory_manager or get_memory_manager()
         self._dynamic_enabled: bool = self._settings.AGENT_MEMORY_DYNAMIC_ENABLED

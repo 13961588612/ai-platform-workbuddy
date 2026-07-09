@@ -28,6 +28,7 @@ class DepartmentModel(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     def to_dict(self) -> dict:
+        """将部门 ORM 记录序列化为 API 友好的字典。"""
         return {
             "id": self.id,
             "dept_id": self.dept_id,
@@ -60,6 +61,7 @@ class RoleModel(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     def to_dict(self) -> dict:
+        """将角色 ORM 记录序列化为 API 友好的字典。"""
         return {
             "id": self.id,
             "role_id": self.role_id,
@@ -117,6 +119,7 @@ class UserModel(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     )
 
     def to_dict(self) -> dict:
+        """将用户 ORM 记录序列化为 API 友好的字典（不含密码哈希）。"""
         return {
             "id": self.id,
             "user_id": self.user_id,
@@ -155,6 +158,7 @@ class CredentialMappingModel(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     def to_dict(self) -> dict:
+        """将凭据映射 ORM 记录序列化为 API 友好的字典（不含密文）。"""
         return {
             "id": self.id,
             "user_id": self.user_id,

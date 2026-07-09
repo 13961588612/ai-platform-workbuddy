@@ -12,6 +12,7 @@ class QwenAdapter(OpenAISDKAdapter):
     PROVIDER_NAME: str = "qwen"
 
     def __init__(self) -> None:
+        """从配置加载 Qwen API 端点与超时并初始化 OpenAI SDK 客户端。"""
         settings = get_settings()
         super().__init__(
             base_url=settings.QWEN_API_ENDPOINT,

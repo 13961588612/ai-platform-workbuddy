@@ -41,6 +41,15 @@ class SkillRetriever:
         registry: SkillRegistry | None = None,
         top_n: int = 50,
     ) -> None:
+        """初始化语义检索器（第一阶段）。
+
+        Args:
+            indexer: 用于 embedding 与 Qdrant 搜索的索引器。
+            cache: 可选的查询结果 Redis 缓存。
+            grouper: 可选的分类分组器，用于 payload 预过滤。
+            registry: 可选的 Skill 注册表，用于填充完整 Skill 对象。
+            top_n: 默认返回的候选数量上限。
+        """
         self._indexer = indexer
         self._cache = cache
         self._grouper = grouper

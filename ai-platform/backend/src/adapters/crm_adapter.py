@@ -16,6 +16,12 @@ class CRMAdapter(BusinessSystemAdapter):
     """CRM（客户关系管理）系统的适配器。"""
 
     def __init__(self, base_url: str = "", timeout: float = 30.0) -> None:
+        """初始化 CRM 适配器并注册会员、积分等工具。
+
+        Args:
+            base_url: CRM 后端 API 基础 URL。
+            timeout: HTTP 请求超时时间（秒）。
+        """
         super().__init__(
             system_type="crm",
             base_url=base_url,
@@ -23,6 +29,7 @@ class CRMAdapter(BusinessSystemAdapter):
         )
 
     def _define_tools(self) -> None:
+        """注册 CRM 会员、积分、标签、营销活动等 MCP 工具定义。"""
         self._tools = [
             ToolDefinition(
                 name="query_member",
@@ -153,6 +160,16 @@ class CRMAdapter(BusinessSystemAdapter):
         arguments: dict[str, Any],
         credential: dict[str, Any] | None,
     ) -> ToolResult:
+        """将 CRM 工具调用路由到对应的后端 HTTP 接口。
+
+        Args:
+            tool_name: 要执行的工具名称。
+            arguments: 工具参数字典。
+            credential: 解密后的后端认证凭据。
+
+        Returns:
+            包含 CRM API 响应数据或错误信息的 ``ToolResult``。
+        """
         get_tools = {
             "query_member": "/api/members",
             "query_member_points": "/api/members/points",
