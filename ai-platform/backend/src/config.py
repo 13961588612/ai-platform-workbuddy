@@ -115,6 +115,14 @@ class Settings(BaseSettings):
         description="是否启动 Redis Stream 入站消息消费者",
     )
     STREAM_CONSUMER_GROUP: str = "agent-core-group"
+    INBOUND_MAX_CONCURRENCY: int = Field(
+        default=8,
+        description="进程内同时处理的入站消息上限（不同 session 可并行）",
+    )
+    INBOUND_READ_COUNT: int = Field(
+        default=4,
+        description="每次 XREADGROUP 最多读取的消息条数",
+    )
 
     # ===== Qdrant =====
     QDRANT_HOST: str = "qdrant"

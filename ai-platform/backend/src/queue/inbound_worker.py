@@ -1,16 +1,18 @@
-"""入站 Redis Stream 消费者 — 消费 Gateway 消息并回写 AgentEvent 流。"""
+"""入站 Redis Stream 消费者 — 消费 Gateway 消息并回写 AgentEvent 流。
+
+进程内有界并发：不同 session 可并行处理；同一 session 严格串行。
+"""
 
 from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any
 
 import redis.asyncio as aioredis
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from src.agent.manager import get_agent_manager
-from src.agent.session import Message, get_session_manager
+from src.agent.session import get_session_manager
 from src.config import get_settings
 from src.queue.redis_stream import (
     BLOCK_MS,
@@ -43,6 +45,12 @@ class InboundStreamWorker:
         self._running = False
         self._stream_keys: list[str] = []
         self._consumer_name = f"agent-core-{os.getpid()}"
+        self._max_concurrency = max(1, self._settings.INBOUND_MAX_CONCURRENCY)
+        self._read_count = max(1, self._settings.INBOUND_READ_COUNT)
+        self._semaphore = asyncio.Semaphore(self._max_concurrency)
+        self._session_locks: dict[str, asyncio.Lock] = {}
+        self._session_locks_guard = asyncio.Lock()
+        self._inflight: set[asyncio.Task[None]] = set()
 
     async def _get_redis(self) -> aioredis.Redis:
         if self._redis is None:
@@ -63,6 +71,14 @@ class InboundStreamWorker:
         for channel in DEFAULT_INBOUND_CHANNELS:
             keys.append(StreamKeys.channel_inbound(channel))
         return sorted(set(keys))
+
+    async def _get_session_lock(self, session_id: str) -> asyncio.Lock:
+        async with self._session_locks_guard:
+            lock = self._session_locks.get(session_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._session_locks[session_id] = lock
+            return lock
 
     async def start(self, agent_ids: list[str] | None = None) -> None:
         if self._running:
@@ -90,6 +106,8 @@ class InboundStreamWorker:
             "Inbound stream worker started",
             consumer=self._consumer_name,
             streams=self._stream_keys,
+            max_concurrency=self._max_concurrency,
+            read_count=self._read_count,
         )
 
     async def stop(self) -> None:
@@ -101,6 +119,15 @@ class InboundStreamWorker:
             except asyncio.CancelledError:
                 pass
             self._task = None
+
+        inflight = list(self._inflight)
+        for task in inflight:
+            task.cancel()
+        if inflight:
+            await asyncio.gather(*inflight, return_exceptions=True)
+        self._inflight.clear()
+        self._session_locks.clear()
+
         if self._redis is not None:
             await self._redis.aclose()
             self._redis = None
@@ -116,6 +143,34 @@ class InboundStreamWorker:
         self._stream_keys = new_keys
         logger.info("Inbound stream subscriptions updated", streams=self._stream_keys)
 
+    def _spawn_handler(
+        self,
+        stream_key: str,
+        message_id: str,
+        inbound: InboundStreamMessage,
+    ) -> None:
+        task = asyncio.create_task(
+            self._handle_message(stream_key, message_id, inbound),
+            name=f"inbound-{inbound.session_id}-{message_id}",
+        )
+        self._inflight.add(task)
+
+        def _on_done(done: asyncio.Task[None]) -> None:
+            self._inflight.discard(done)
+            if done.cancelled():
+                return
+            exc = done.exception()
+            if exc is not None:
+                logger.error(
+                    "Inbound handler task failed",
+                    session_id=inbound.session_id,
+                    message_id=message_id,
+                    error=str(exc),
+                    exc_info=exc,
+                )
+
+        task.add_done_callback(_on_done)
+
     async def _consume_loop(self) -> None:
         redis = await self._get_redis()
         while self._running:
@@ -124,12 +179,19 @@ class InboundStreamWorker:
                     await asyncio.sleep(1)
                     continue
 
+                # 背压：在飞任务已达上限时暂停拉取，避免无界 create_task
+                while self._running and len(self._inflight) >= self._max_concurrency:
+                    await asyncio.sleep(0.05)
+
+                if not self._running:
+                    break
+
                 streams = {key: ">" for key in self._stream_keys}
                 result = await redis.xreadgroup(
                     groupname=CONSUMER_GROUP,
                     consumername=self._consumer_name,
                     streams=streams,
-                    count=1,
+                    count=self._read_count,
                     block=BLOCK_MS,
                 )
                 if not result:
@@ -139,17 +201,7 @@ class InboundStreamWorker:
                     for message_id, raw_fields in messages:
                         fields = normalize_stream_fields(raw_fields)
                         inbound = parse_inbound_fields(fields)
-                        try:
-                            await self._process_inbound(inbound, stream_key)
-                            await redis.xack(stream_key, CONSUMER_GROUP, message_id)
-                        except Exception as exc:
-                            logger.error(
-                                "Failed to process inbound stream message",
-                                stream_key=stream_key,
-                                message_id=message_id,
-                                session_id=inbound.session_id,
-                                error=str(exc),
-                            )
+                        self._spawn_handler(str(stream_key), str(message_id), inbound)
             except asyncio.CancelledError:
                 raise
             except (RedisTimeoutError, asyncio.TimeoutError):
@@ -158,6 +210,33 @@ class InboundStreamWorker:
             except Exception as exc:
                 logger.error("Inbound stream consume loop error", error=str(exc))
                 await asyncio.sleep(1)
+
+    async def _handle_message(
+        self,
+        stream_key: str,
+        message_id: str,
+        inbound: InboundStreamMessage,
+    ) -> None:
+        """有界并发 + 同 session 串行；成功后 ACK。"""
+        redis = await self._get_redis()
+        async with self._semaphore:
+            lock = await self._get_session_lock(inbound.session_id)
+            async with lock:
+                try:
+                    await self._process_inbound(inbound, stream_key)
+                    await redis.xack(stream_key, CONSUMER_GROUP, message_id)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.error(
+                        "Failed to process inbound stream message",
+                        stream_key=stream_key,
+                        message_id=message_id,
+                        session_id=inbound.session_id,
+                        error=str(exc),
+                        exc_info=True,
+                    )
+                    # 暂不 ACK，留给后续 Phase 3 claim/重试
 
     async def _process_inbound(
         self,
