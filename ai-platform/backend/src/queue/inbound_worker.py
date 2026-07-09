@@ -217,20 +217,57 @@ class InboundStreamWorker:
 
         response_parts: list[str] = []
         runtime_error: str | None = None
+        timeout_sec = self._settings.AGENT_MESSAGE_TIMEOUT
 
-        async for event in instance.process_message(session=session, message=user_msg):
-            await producer.publish_agent_event(
+        try:
+            async with asyncio.timeout(timeout_sec):
+                async for event in instance.process_message(
+                    session=session,
+                    message=user_msg,
+                ):
+                    await producer.publish_agent_event(
+                        session_id=session.session_id,
+                        user_id=inbound.user_id,
+                        channel=session.channel,
+                        agent_id=resolved_agent_id,
+                        trace_id=inbound.trace_id,
+                        event=event,
+                    )
+                    if event.type == AgentEventType.TEXT_DELTA and event.content:
+                        response_parts.append(event.content)
+                    elif event.type == AgentEventType.ERROR:
+                        runtime_error = event.message or "Agent runtime error"
+        except TimeoutError:
+            logger.error(
+                "Agent message processing timed out",
                 session_id=session.session_id,
-                user_id=inbound.user_id,
-                channel=session.channel,
                 agent_id=resolved_agent_id,
-                trace_id=inbound.trace_id,
-                event=event,
+                timeout_sec=timeout_sec,
             )
-            if event.type == AgentEventType.TEXT_DELTA and event.content:
-                response_parts.append(event.content)
-            elif event.type == AgentEventType.ERROR:
-                runtime_error = event.message or "Agent runtime error"
+            await self._publish_error(
+                producer,
+                inbound,
+                resolved_agent_id,
+                "agent_timeout",
+                f"处理超时（{timeout_sec}s），请稍后重试",
+            )
+            return
+        except Exception as exc:
+            logger.error(
+                "Agent message processing failed",
+                session_id=session.session_id,
+                agent_id=resolved_agent_id,
+                error=str(exc),
+                exc_info=True,
+            )
+            await self._publish_error(
+                producer,
+                inbound,
+                resolved_agent_id,
+                "agent_processing_error",
+                str(exc) or "Agent processing failed",
+            )
+            return
 
         response_text = "".join(response_parts)
         if response_text.strip():

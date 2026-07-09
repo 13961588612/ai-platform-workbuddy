@@ -166,6 +166,7 @@ class OpenHarnessRuntime(AgentRuntime):
                 "RUNTIME_ERROR",
                 "LLM Gateway is not configured. Call set_llm_gateway() before run().",
             )
+            yield AgentEvent.done()
             return
 
         agent_config: AgentConfig = (
@@ -281,6 +282,7 @@ class OpenHarnessRuntime(AgentRuntime):
                 exc_info=True,
             )
             yield AgentEvent.error("RUNTIME_ERROR", str(exc))
+            yield AgentEvent.done()
 
     async def register_tools(self, skills: list[dict[str, Any]]) -> None:
         """空操作 — 原生 OpenHarness 通过 ``extra_skill_dirs`` 发现 skills。"""

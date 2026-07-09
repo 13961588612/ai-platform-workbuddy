@@ -39,6 +39,9 @@ const RECONNECT_BASE_DELAY = 1000;
 /** Heartbeat ping interval (ms). */
 const HEARTBEAT_INTERVAL = 30000;
 
+/** Abort generation if no terminal event within this window (ms). */
+const GENERATION_TIMEOUT_MS = 120_000;
+
 // ===== Hook Return Type =====
 
 /** Return type of the useChat hook. */
@@ -76,10 +79,17 @@ export function useChat(sessionId: string | null): UseChatReturn {
   const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
     null,
   );
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 主动关闭（换会话 / 卸载）时置位，避免 onclose 触发重连风暴。 */
+  const intentionalCloseRef = useRef(false);
+  /** 始终指向最新 sessionId，供 reconnect 定时器读取，避免闭包旧值。 */
+  const sessionIdRef = useRef<string | null>(sessionId);
   const streamingMessageIdRef = useRef<string | null>(null);
+  const generationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  sessionIdRef.current = sessionId;
 
   const {
-    sessionId: currentSessionId,
     agentId,
     setSessionId,
     setAgentId,
@@ -118,8 +128,16 @@ export function useChat(sessionId: string | null): UseChatReturn {
   );
 
   /** 发送失败或异常时解除「生成中」并标记占位消息为错误。 */
+  const clearGenerationWatchdog = useCallback((): void => {
+    if (generationTimeoutRef.current) {
+      clearTimeout(generationTimeoutRef.current);
+      generationTimeoutRef.current = null;
+    }
+  }, []);
+
   const abortGenerating = useCallback(
     (errorMessage?: string): void => {
+      clearGenerationWatchdog();
       const streamingId = streamingMessageIdRef.current;
       if (streamingId) {
         updateMessageStatus(streamingId, "error");
@@ -130,13 +148,25 @@ export function useChat(sessionId: string | null): UseChatReturn {
         setError(errorMessage);
       }
     },
-    [updateMessageStatus, setGenerating, setError],
+    [clearGenerationWatchdog, updateMessageStatus, setGenerating, setError],
   );
+
+  const armGenerationWatchdog = useCallback((): void => {
+    clearGenerationWatchdog();
+    generationTimeoutRef.current = setTimeout(() => {
+      if (useChatStore.getState().isGenerating) {
+        abortGenerating("请求超时，请稍后重试");
+      }
+    }, GENERATION_TIMEOUT_MS);
+  }, [clearGenerationWatchdog, abortGenerating]);
 
   // ===== Handle Raw Event =====
   const handleRawEvent = useCallback(
     (rawEvent: RawAgentEvent): void => {
       const event: AgentEvent = adaptAgentEvent(rawEvent);
+      if (useChatStore.getState().isGenerating) {
+        armGenerationWatchdog();
+      }
 
       switch (event.type) {
         case "text.delta": {
@@ -257,6 +287,7 @@ export function useChat(sessionId: string | null): UseChatReturn {
             updateMessageStatus(streamingId, "error");
             streamingMessageIdRef.current = null;
           }
+          clearGenerationWatchdog();
           setGenerating(false);
           break;
         }
@@ -272,6 +303,7 @@ export function useChat(sessionId: string | null): UseChatReturn {
           if (event.tokenUsage) {
             addTokenUsage(event.tokenUsage);
           }
+          clearGenerationWatchdog();
           setGenerating(false);
           break;
         }
@@ -295,6 +327,8 @@ export function useChat(sessionId: string | null): UseChatReturn {
       setError,
       addPendingApproval,
       addApproval,
+      armGenerationWatchdog,
+      clearGenerationWatchdog,
     ],
   );
 
@@ -330,24 +364,56 @@ export function useChat(sessionId: string | null): UseChatReturn {
     [handleRawEvent],
   );
 
+  const clearReconnectTimer = useCallback((): void => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }, []);
+
+  /** 主动关闭当前 WS，并取消待执行的重连。 */
+  const closeSocketIntentionally = useCallback((): void => {
+    intentionalCloseRef.current = true;
+    clearReconnectTimer();
+    reconnectAttemptsRef.current = 0;
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+    if (wsRef.current) {
+      const socket = wsRef.current;
+      wsRef.current = null;
+      socket.onclose = null;
+      socket.onerror = null;
+      socket.onmessage = null;
+      socket.close();
+    }
+  }, [clearReconnectTimer]);
+
   // ===== Connect WebSocket =====
   const connect = useCallback((): void => {
-    if (!sessionId || !user) {
+    const activeSessionId = sessionIdRef.current;
+    if (!activeSessionId || !user) {
       return;
     }
 
-    // Close existing connection
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+    // Close existing connection without triggering reconnect
+    closeSocketIntentionally();
+    intentionalCloseRef.current = false;
 
     setWsState("connecting");
-    const wsUrl = getChatWsUrl(sessionId, user.userId);
+    const wsUrl = getChatWsUrl(activeSessionId, user.userId);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
+    const connectedSessionId = activeSessionId;
 
     ws.onopen = () => {
+      // 会话已切换则丢弃这条迟到的连接
+      if (sessionIdRef.current !== connectedSessionId) {
+        intentionalCloseRef.current = true;
+        ws.close();
+        return;
+      }
       setWsState("connected");
       reconnectAttemptsRef.current = 0;
 
@@ -367,46 +433,72 @@ export function useChat(sessionId: string | null): UseChatReturn {
     };
 
     ws.onerror = () => {
+      if (intentionalCloseRef.current) {
+        return;
+      }
       setWsState("error");
       setError("WebSocket 连接错误");
     };
 
     ws.onclose = () => {
-      setWsState("disconnected");
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current);
-        heartbeatIntervalRef.current = null;
-      }
-
-      // Attempt reconnection
-      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttemptsRef.current++;
-        const delay =
-          RECONNECT_BASE_DELAY *
-          Math.pow(2, reconnectAttemptsRef.current - 1);
-        setWsState("reconnecting");
-        setTimeout(() => {
-          connect();
-        }, delay);
-      }
-    };
-  }, [sessionId, user, setWsState, setError, handleWsMessage]);
-
-  // ===== Auto-connect when sessionId changes =====
-  useEffect(() => {
-    if (sessionId && user) {
-      connect();
-    }
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+      if (wsRef.current === ws) {
         wsRef.current = null;
       }
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = null;
       }
+      clearGenerationWatchdog();
+
+      // 主动关闭或会话已切换：不重连
+      if (
+        intentionalCloseRef.current ||
+        sessionIdRef.current !== connectedSessionId
+      ) {
+        intentionalCloseRef.current = false;
+        return;
+      }
+
+      setWsState("disconnected");
+
+      // Attempt reconnection only for the still-active session
+      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttemptsRef.current++;
+        const delay =
+          RECONNECT_BASE_DELAY *
+          Math.pow(2, reconnectAttemptsRef.current - 1);
+        setWsState("reconnecting");
+        clearReconnectTimer();
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          if (sessionIdRef.current === connectedSessionId) {
+            connect();
+          }
+        }, delay);
+      }
+    };
+  }, [
+    user,
+    setWsState,
+    setError,
+    handleWsMessage,
+    clearGenerationWatchdog,
+    closeSocketIntentionally,
+    clearReconnectTimer,
+  ]);
+
+  // ===== Auto-connect when sessionId changes =====
+  useEffect(() => {
+    if (sessionId && user) {
+      connect();
+    } else {
+      closeSocketIntentionally();
+      setWsState("disconnected");
+    }
+
+    return () => {
+      closeSocketIntentionally();
+      clearGenerationWatchdog();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, user]);
@@ -443,6 +535,7 @@ export function useChat(sessionId: string | null): UseChatReturn {
       addMessage(assistantMessage);
       streamingMessageIdRef.current = assistantMessageId;
       setGenerating(true);
+      armGenerationWatchdog();
 
       // Send inbound message
       const inbound: InboundMessage = {
@@ -467,6 +560,7 @@ export function useChat(sessionId: string | null): UseChatReturn {
       setGenerating,
       sendInbound,
       abortGenerating,
+      armGenerationWatchdog,
     ],
   );
 
@@ -503,6 +597,7 @@ export function useChat(sessionId: string | null): UseChatReturn {
       }
 
       streamingMessageIdRef.current = null;
+      clearGenerationWatchdog();
       setGenerating(false);
 
       try {
@@ -523,7 +618,7 @@ export function useChat(sessionId: string | null): UseChatReturn {
         setError(message);
       }
     },
-    [user, setAgentId, setSessionId, clearMessages, setError, setGenerating],
+    [user, setAgentId, setSessionId, clearMessages, setError, setGenerating, clearGenerationWatchdog],
   );
 
   // ===== Close Session =====
@@ -538,18 +633,26 @@ export function useChat(sessionId: string | null): UseChatReturn {
       sendInbound(inbound);
     }
 
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+    closeSocketIntentionally();
     clearMessages();
     setSessionId(null);
+    clearGenerationWatchdog();
     setGenerating(false);
-  }, [sessionId, user, sendInbound, clearMessages, setSessionId, setGenerating]);
+  }, [
+    sessionId,
+    user,
+    sendInbound,
+    closeSocketIntentionally,
+    clearMessages,
+    setSessionId,
+    setGenerating,
+    clearGenerationWatchdog,
+  ]);
 
   // ===== Manual Reconnect =====
   const reconnect = useCallback((): void => {
     reconnectAttemptsRef.current = 0;
+    intentionalCloseRef.current = false;
     connect();
   }, [connect]);
 

@@ -11,14 +11,37 @@
  * component for messages that require approval.
  */
 
-import React, { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import remarkGfm from "remark-gfm";
 import { ApprovalCard } from "./ApprovalCard";
+import { markdownComponents } from "./markdownComponents";
 import { useChatStore } from "../store/chatStore";
-import { formatTime, clsx } from "../utils/format";
+import { formatTime } from "../utils/format";
+import { normalizeMarkdownTables } from "../utils/markdownNormalize";
 import type { ChatMessage } from "../types/message";
+
+/** Assistant avatar shown beside agent messages. */
+function AssistantAvatar(): JSX.Element {
+  return (
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-lg ring-2 ring-white"
+      aria-hidden
+    >
+      🤖
+    </div>
+  );
+}
+
+/** Shown while waiting for the first text delta from the agent. */
+function ThinkingIndicator(): JSX.Element {
+  return (
+    <div className="flex items-center gap-1 text-sm text-surface-dark/55">
+      <span>正在思考</span>
+      <span className="inline-flex w-4 animate-pulse">…</span>
+    </div>
+  );
+}
 
 // ===== Message Bubble =====
 
@@ -33,6 +56,15 @@ function MessageBubble({ message, currentUserId: _currentUserId }: MessageBubble
   const isUser = message.role === "user";
   const isSystem = message.role === "system";
   const isTool = message.role === "tool";
+
+  const assistantContent = useMemo(
+    () => normalizeMarkdownTables(message.content ?? ""),
+    [message.content],
+  );
+  const isThinking =
+    !isUser &&
+    message.status === "streaming" &&
+    assistantContent.trim().length === 0;
 
   // System messages — centered notification
   if (isSystem) {
@@ -79,65 +111,42 @@ function MessageBubble({ message, currentUserId: _currentUserId }: MessageBubble
   }
 
   // User / Assistant messages
-  return (
-    <div className={clsx("flex py-2", isUser ? "justify-end" : "justify-start")}>
-      <div
-        className={clsx(
-          "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm",
-          isUser
-            ? "bg-primary-600 text-white"
-            : "bg-surface-muted text-surface-dark",
-        )}
-      >
-        {/* Content (markdown for assistant) */}
-        {isUser ? (
+  if (isUser) {
+    return (
+      <div className="flex justify-end py-2">
+        <div className="max-w-[75%] rounded-2xl bg-primary-600 px-4 py-2.5 text-sm text-white">
           <p className="whitespace-pre-wrap">{message.content}</p>
+          <div className="mt-1 text-xs text-white/60">
+            {formatTime(message.timestamp)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-3 py-2">
+      <AssistantAvatar />
+      <div className="max-w-[75%] rounded-2xl bg-surface-muted px-4 py-2.5 text-sm text-surface-dark">
+        {isThinking ? (
+          <ThinkingIndicator />
         ) : (
           <div className="prose prose-sm max-w-none prose-p:my-1 prose-pre:my-2">
             <ReactMarkdown
-              components={{
-                code({ node: _node, className, children, ...props }: {
-                  node?: unknown;
-                  className?: string;
-                  children?: React.ReactNode;
-                  [key: string]: unknown;
-                }) {
-                  const match = /language-(\w+)/.exec(className ?? "");
-                  const isInline = !className;
-                  if (isInline) {
-                    return (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
-                    );
-                  }
-                  return (
-                    <SyntaxHighlighter
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      style={oneDark as any}
-                      language={match?.[1] ?? "text"}
-                      PreTag="div"
-                    >
-                      {String(children).replace(/\n$/, "")}
-                    </SyntaxHighlighter>
-                  );
-                },
-              }}
+              remarkPlugins={[remarkGfm]}
+              components={markdownComponents}
             >
-              {message.content || (message.status === "streaming" ? "▋" : "")}
+              {assistantContent}
             </ReactMarkdown>
           </div>
         )}
 
         {/* Timestamp */}
-        <div
-          className={clsx(
-            "mt-1 text-xs",
-            isUser ? "text-white/60" : "text-surface-dark/40",
-          )}
-        >
-          {formatTime(message.timestamp)}
-        </div>
+        {!isThinking && (
+          <div className="mt-1 text-xs text-surface-dark/40">
+            {formatTime(message.timestamp)}
+          </div>
+        )}
 
         {/* Error indicator */}
         {message.status === "error" && message.error && (

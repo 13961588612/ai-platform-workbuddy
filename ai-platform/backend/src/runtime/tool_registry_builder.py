@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import json
 import re
@@ -13,6 +14,7 @@ from openharness.tools.base import BaseTool, ToolExecutionContext, ToolRegistry,
 from openharness.tools.skill_tool import SkillTool
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
+from src.config import get_settings
 from src.utils.logging import get_logger
 
 logger = get_logger("runtime.tool_registry")
@@ -119,12 +121,30 @@ class PlatformMcpToolAdapter(BaseTool):
             mcp_tool=self._tool_info.name,
             arguments=payload,
         )
+        timeout = get_settings().MCP_TOOL_CALL_TIMEOUT
         try:
-            output = await self._manager.call_tool(
-                self._tool_info.server_name,
-                self._tool_info.name,
-                payload,
+            output = await asyncio.wait_for(
+                self._manager.call_tool(
+                    self._tool_info.server_name,
+                    self._tool_info.name,
+                    payload,
+                ),
+                timeout=timeout,
             )
+        except TimeoutError:
+            message = (
+                f"MCP 工具调用超时（{timeout}s）: "
+                f"{self._tool_info.server_name}/{self._tool_info.name}"
+            )
+            logger.warning(
+                "MCP tool call timed out",
+                tool=self.name,
+                server=self._tool_info.server_name,
+                mcp_tool=self._tool_info.name,
+                arguments=payload,
+                timeout=timeout,
+            )
+            return ToolResult(output=message, is_error=True)
         except McpServerNotConnectedError as exc:
             logger.warning(
                 "MCP tool call failed",
@@ -135,6 +155,18 @@ class PlatformMcpToolAdapter(BaseTool):
                 error=str(exc),
             )
             return ToolResult(output=str(exc), is_error=True)
+        except Exception as exc:
+            message = str(exc).strip() or exc.__class__.__name__
+            logger.warning(
+                "MCP tool call failed",
+                tool=self.name,
+                server=self._tool_info.server_name,
+                mcp_tool=self._tool_info.name,
+                arguments=payload,
+                error=message,
+                exc_type=exc.__class__.__name__,
+            )
+            return ToolResult(output=message, is_error=True)
 
         logger.info(
             "MCP tool response",

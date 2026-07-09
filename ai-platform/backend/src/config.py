@@ -69,6 +69,14 @@ class Settings(BaseSettings):
         description="日志轮转保留的历史文件数量",
     )
     AGENT_TRACE_LOG: bool = True
+    AGENT_MESSAGE_TIMEOUT: int = Field(
+        default=120,
+        description="单条入站消息 Agent 处理超时（秒），超时后向前端推送 error + done",
+    )
+    MCP_TOOL_CALL_TIMEOUT: int = Field(
+        default=30,
+        description="单次 MCP 工具调用超时（秒）",
+    )
 
     # ===== 服务器 =====
     HOST: str = "0.0.0.0"

@@ -100,7 +100,7 @@ inputSchema:
 | `couponTypeName` | `string` | 券类型名称 | 是 | — |
 | `couponBeginDate` | `string` | 有效开始 | 是 | — |
 | `couponEndDate` | `string` | 有效结束 / 结束日期 | 是 | — |
-| `balance` | `number` | 面额/余额等 | 否 | `100` |
+| `balance` | `number` | 面额/余额（单位：元） | 否 | `100` |
 | `pendingAmount` | `number` | 在途/冻结等 | 否 | `0` |
 | `status` | `string` | 业务状态 | 是 | `"有效"` |
 | `belongingStoreId` | `string` | 归属门店 id（部分来源有） | 是 | — |

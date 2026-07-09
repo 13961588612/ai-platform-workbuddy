@@ -7,7 +7,7 @@ agent:
   display_name: CRM 智能助手
   description: >
     面向门店与客服团队的 CRM 智能助手，支持会员查询、积分管理、
-    等级标签、客户画像、营销活动与客户旅程分析。
+    等级标签、客户画像。
   version: "1.0.0"
   tags:
     - crm
@@ -33,7 +33,6 @@ agent:
       - 画像
       - 营销
       - 活动
-      - 旅程
       - 消费记录
 
   memory:
