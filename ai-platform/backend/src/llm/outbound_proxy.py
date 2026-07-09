@@ -13,11 +13,11 @@ LLM provider 端点（api.deepseek.com、dashscope.aliyuncs.com）
 """
 
 from __future__ import annotations
+from typing import Any
 
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -60,7 +60,7 @@ class OutboundProxyManager:
     def _initialize_pool(self) -> None:
         """从设置中初始化代理池。"""
         if self._settings.OUTBOUND_PROXY_ENABLED:
-            node = ProxyNode(
+            node: ProxyNode = ProxyNode(
                 host=self._settings.OUTBOUND_PROXY_HOST,
                 port=self._settings.OUTBOUND_PROXY_PORT,
                 protocol="http",
@@ -75,7 +75,7 @@ class OutboundProxyManager:
     def add_proxy_node(self, host: str, port: int, protocol: str = "http") -> None:
         """向池中添加一个代理节点。"""
         with self._lock:
-            node = ProxyNode(host=host, port=port, protocol=protocol)
+            node: ProxyNode = ProxyNode(host=host, port=port, protocol=protocol)
             self._proxy_pool.append(node)
             logger.info("Proxy node added", host=host, port=port)
 
@@ -90,16 +90,16 @@ class OutboundProxyManager:
             ProxyUnavailableError: 所有代理节点都不健康时抛出。
         """
         with self._lock:
-            healthy_nodes = [n for n in self._proxy_pool if n.is_healthy]
+            healthy_nodes: list[Any] = [n for n in self._proxy_pool if n.is_healthy]
 
             if not healthy_nodes:
                 logger.error("All outbound proxy nodes unavailable")
                 raise ProxyUnavailableError()
 
-            idx = self._current_index % len(healthy_nodes)
+            idx: Any = self._current_index % len(healthy_nodes)
             self._current_index = (idx + 1) % len(healthy_nodes)
 
-            selected = healthy_nodes[idx]
+            selected: Any = healthy_nodes[idx]
             selected.total_requests += 1
 
             logger.debug(
@@ -115,7 +115,7 @@ class OutboundProxyManager:
         if not self._settings.OUTBOUND_PROXY_ENABLED:
             return None
         try:
-            node = self.get_proxy()
+            node: ProxyNode = self.get_proxy()
             return node.url
         except ProxyUnavailableError:
             return None
@@ -131,13 +131,13 @@ class OutboundProxyManager:
             域名是否被允许。
         """
         # 合并配置的允许域名与默认值
-        allowed = set(self.ALLOWED_DOMAINS + self._settings.OUTBOUND_PROXY_ALLOWED_DOMAINS)
+        allowed: set[Any] = set(self.ALLOWED_DOMAINS + self._settings.OUTBOUND_PROXY_ALLOWED_DOMAINS)
         return any(domain.endswith(d) for d in allowed)
 
     def check_domain(self, url: str) -> bool:
         """检查 URL 的域名是否被允许通过代理。"""
-        parsed = urlparse(url)
-        domain = parsed.hostname or ""
+        parsed: Any = urlparse(url)
+        domain: Any = parsed.hostname or ""
         return self.is_allowed(domain)
 
     def log_request(
@@ -155,7 +155,7 @@ class OutboundProxyManager:
         if not self._audit_log_enabled:
             return
 
-        audit_entry = {
+        audit_entry: dict[str, Any] = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "proxy_node": request_info.get("proxy_node"),
             "target_domain": request_info.get("domain"),
@@ -178,7 +178,7 @@ class OutboundProxyManager:
         """
         results: dict[str, bool] = {}
         for node in self._proxy_pool:
-            is_healthy = await self._check_node(node)
+            is_healthy: bool = await self._check_node(node)
             results[node.url] = is_healthy
         return results
 
@@ -190,8 +190,8 @@ class OutboundProxyManager:
                 timeout=10,
             ) as client:
                 # 通过代理进行简单的连通性检查
-                response = await client.get("https://httpbin.org/status/200")
-                is_ok = response.status_code == 200
+                response: Skill | None = await client.get("https://httpbin.org/status/200")
+                is_ok: bool = response.status_code == 200
         except Exception as exc:
             logger.warning(
                 "Proxy health check failed",
@@ -199,7 +199,7 @@ class OutboundProxyManager:
                 port=node.port,
                 error=str(exc),
             )
-            is_ok = False
+            is_ok: bool = False
 
         with self._lock:
             node.last_check_at = datetime.now(timezone.utc)

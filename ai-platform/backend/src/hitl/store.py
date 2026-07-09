@@ -11,10 +11,10 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -77,7 +77,7 @@ class ApprovalRecord(BaseModel):
         """检查此审批是否已超时。"""
         if self.status != ApprovalStatus.PENDING:
             return False
-        expiry = self.created_at + timedelta(seconds=self.timeout_seconds)
+        expiry: Any = self.created_at + timedelta(seconds=self.timeout_seconds)
         return datetime.now(timezone.utc) > expiry
 
 
@@ -119,7 +119,7 @@ class ApprovalStore:
         返回：
             创建的 ApprovalRecord。
         """
-        record = ApprovalRecord(
+        record: ApprovalRecord = ApprovalRecord(
             approval_id=f"approval-{uuid4().hex[:16]}",
             session_id=session_id,
             agent_id=agent_id,
@@ -164,7 +164,7 @@ class ApprovalStore:
             更新后的 ApprovalRecord，若未找到则返回 None。
         """
         async with self._lock:
-            record = self._records.get(approval_id)
+            record: Skill | None = self._records.get(approval_id)
             if not record:
                 return None
             if record.status != ApprovalStatus.PENDING:
@@ -194,7 +194,7 @@ class ApprovalStore:
     ) -> list[ApprovalRecord]:
         """列出某用户的审批，可按状态筛选。"""
         async with self._lock:
-            results = [
+            results: list[Any] = [
                 record
                 for record in self._records.values()
                 if record.user_id == user_id
@@ -211,7 +211,7 @@ class ApprovalStore:
     ) -> list[ApprovalRecord]:
         """列出某 Session 的审批，可按状态筛选。"""
         async with self._lock:
-            results = [
+            results: list[Any] = [
                 record
                 for record in self._records.values()
                 if record.session_id == session_id
@@ -227,7 +227,7 @@ class ApprovalStore:
     ) -> list[ApprovalRecord]:
         """列出所有审批，可按状态筛选。"""
         async with self._lock:
-            results = [
+            results: list[Any] = [
                 record
                 for record in self._records.values()
                 if status is None or record.status == status
@@ -247,20 +247,20 @@ class ApprovalStore:
     async def get_stats(self) -> dict[str, int]:
         """获取审批统计摘要。"""
         async with self._lock:
-            total = len(self._records)
-            pending = sum(
+            total: Any = len(self._records)
+            pending: Any = sum(
                 1 for r in self._records.values()
                 if r.status == ApprovalStatus.PENDING
             )
-            approved = sum(
+            approved: Any = sum(
                 1 for r in self._records.values()
                 if r.status == ApprovalStatus.APPROVED
             )
-            rejected = sum(
+            rejected: Any = sum(
                 1 for r in self._records.values()
                 if r.status == ApprovalStatus.REJECTED
             )
-            timeout = sum(
+            timeout: Any = sum(
                 1 for r in self._records.values()
                 if r.status == ApprovalStatus.TIMEOUT
             )
@@ -287,7 +287,7 @@ class ApprovalStore:
 
         返回被标记为超时的审批数量。
         """
-        timed_out = 0
+        timed_out: int = 0
         async with self._lock:
             for record in self._records.values():
                 if record.is_expired():

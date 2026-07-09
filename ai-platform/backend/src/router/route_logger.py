@@ -6,6 +6,7 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 import uuid
 from datetime import datetime, timezone
@@ -42,9 +43,9 @@ class RouteLogger:
             result: AgentRouter 产生的路由决策。
         """
         # 根据 schema 将输入文本截断为前 200 个字符
-        truncated_text = request.text[:200]
+        truncated_text: Any = request.text[:200]
 
-        route_log = RouteLogModel(
+        route_log: RouteLogModel = RouteLogModel(
             id=uuid.uuid4(),
             session_id=request.session_id,
             user_id=request.user_id,
@@ -83,24 +84,24 @@ class RouteLogger:
             匹配的 RouteLog 条目列表。
         """
         async with db_session_context() as session:
-            stmt = select(RouteLogModel).order_by(RouteLogModel.timestamp.desc())
+            stmt: Any = select(RouteLogModel).order_by(RouteLogModel.timestamp.desc())
 
             if filter_obj.session_id:
-                stmt = stmt.where(RouteLogModel.session_id == filter_obj.session_id)
+                stmt: Any = stmt.where(RouteLogModel.session_id == filter_obj.session_id)
             if filter_obj.user_id:
-                stmt = stmt.where(RouteLogModel.user_id == filter_obj.user_id)
+                stmt: Any = stmt.where(RouteLogModel.user_id == filter_obj.user_id)
             if filter_obj.agent_id:
-                stmt = stmt.where(RouteLogModel.matched_agent_id == filter_obj.agent_id)
+                stmt: Any = stmt.where(RouteLogModel.matched_agent_id == filter_obj.agent_id)
             if filter_obj.strategy:
-                stmt = stmt.where(RouteLogModel.strategy_used == filter_obj.strategy)
+                stmt: Any = stmt.where(RouteLogModel.strategy_used == filter_obj.strategy)
             if filter_obj.start_time:
-                stmt = stmt.where(RouteLogModel.timestamp >= filter_obj.start_time)
+                stmt: Any = stmt.where(RouteLogModel.timestamp >= filter_obj.start_time)
             if filter_obj.end_time:
-                stmt = stmt.where(RouteLogModel.timestamp <= filter_obj.end_time)
+                stmt: Any = stmt.where(RouteLogModel.timestamp <= filter_obj.end_time)
 
-            stmt = stmt.limit(filter_obj.limit).offset(filter_obj.offset)
-            result = await session.execute(stmt)
-            rows = result.scalars().all()
+            stmt: Any = stmt.limit(filter_obj.limit).offset(filter_obj.offset)
+            result: ToolResult = await session.execute(stmt)
+            rows: Any = result.scalars().all()
 
         return [
             RouteLog(
@@ -133,22 +134,22 @@ class RouteLogger:
             包含流量分布和性能指标的 RouteStats。
         """
         async with db_session_context() as session:
-            stmt = select(RouteLogModel)
+            stmt: Any = select(RouteLogModel)
             if start_time:
-                stmt = stmt.where(RouteLogModel.timestamp >= start_time)
+                stmt: Any = stmt.where(RouteLogModel.timestamp >= start_time)
             if end_time:
-                stmt = stmt.where(RouteLogModel.timestamp <= end_time)
+                stmt: Any = stmt.where(RouteLogModel.timestamp <= end_time)
 
-            result = await session.execute(stmt)
-            rows = result.scalars().all()
+            result: ToolResult = await session.execute(stmt)
+            rows: Any = result.scalars().all()
 
         if not rows:
             return RouteStats()
 
         by_agent: dict[str, int] = {}
         by_strategy: dict[str, int] = {}
-        total_latency = 0.0
-        total_confidence = 0.0
+        total_latency: float = 0.0
+        total_confidence: float = 0.0
 
         for row in rows:
             by_agent[row.matched_agent_id] = by_agent.get(row.matched_agent_id, 0) + 1
@@ -156,7 +157,7 @@ class RouteLogger:
             total_latency += row.latency_ms
             total_confidence += row.confidence
 
-        count = len(rows)
+        count: Any = len(rows)
         return RouteStats(
             total_routes=count,
             by_agent=by_agent,

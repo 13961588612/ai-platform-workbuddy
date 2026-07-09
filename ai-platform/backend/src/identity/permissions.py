@@ -16,7 +16,7 @@ PermissionEngine — RBAC + Skill 级别覆盖 + 部门限制。
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import structlog
 
@@ -50,8 +50,8 @@ class PermissionEngine:
 
         这是一个同步的、确定性的检查 — 无 I/O。
         """
-        skill_id = skill.skill_id
-        skill_category = skill.category
+        skill_id: Any = skill.skill_id
+        skill_category: Any = skill.category
 
         # 1. 用户级别拒绝列表（最高优先级）
         if skill_id in user.skill_deny_list:
@@ -63,7 +63,7 @@ class PermissionEngine:
 
         # 3. 角色级别检查
         for role_id in user.roles:
-            role = self._role_cache.get(role_id, {})
+            role: Skill | None = self._role_cache.get(role_id, {})
             if skill_id in role.get("skill_deny_list", []):
                 return False
             if skill_id in role.get("skill_allow_list", []):
@@ -71,21 +71,21 @@ class PermissionEngine:
 
         # 4. 部门拒绝的分类
         if user.dept_id:
-            dept = self._dept_cache.get(user.dept_id, {})
+            dept: Skill | None = self._dept_cache.get(user.dept_id, {})
             if skill_category in dept.get("denied_categories", []):
                 return False
 
         # 5. 部门允许的分类
         if user.dept_id:
-            dept = self._dept_cache.get(user.dept_id, {})
-            allowed = dept.get("allowed_categories", [])
+            dept: Skill | None = self._dept_cache.get(user.dept_id, {})
+            allowed: Skill | None = dept.get("allowed_categories", [])
             if allowed and skill_category not in allowed:
                 return False
 
         # 6. 角色允许的分类
         for role_id in user.roles:
-            role = self._role_cache.get(role_id, {})
-            allowed_cats = role.get("allowed_categories", [])
+            role: Skill | None = self._role_cache.get(role_id, {})
+            allowed_cats: Skill | None = role.get("allowed_categories", [])
             if allowed_cats and skill_category in allowed_cats:
                 return True
 
@@ -97,7 +97,7 @@ class PermissionEngine:
 
         # 8. 默认：封闭模型 — 除非显式允许，否则拒绝
         # 如果完全没有配置任何限制，则允许（开发环境的开放模型）
-        has_any_restriction = (
+        has_any_restriction: Any = (
             bool(user.skill_deny_list)
             or bool(user.skill_allow_list)
             or bool(user.roles)
@@ -119,7 +119,7 @@ class PermissionEngine:
         """从用户的允许列表中返回 Skill ID（仅显式覆盖）。"""
         allowed: set[str] = set(user.skill_allow_list)
         for role_id in user.roles:
-            role = self._role_cache.get(role_id, {})
+            role: Skill | None = self._role_cache.get(role_id, {})
             allowed.update(role.get("skill_allow_list", []))
         return list(allowed)
 
@@ -133,19 +133,19 @@ class PermissionEngine:
 
         # 来自角色
         for role_id in user.roles:
-            role = self._role_cache.get(role_id, {})
+            role: Skill | None = self._role_cache.get(role_id, {})
             cats.update(role.get("allowed_categories", []))
 
         # 来自部门
         if user.dept_id:
-            dept = self._dept_cache.get(user.dept_id, {})
-            dept_allowed = dept.get("allowed_categories", [])
+            dept: Skill | None = self._dept_cache.get(user.dept_id, {})
+            dept_allowed: Skill | None = dept.get("allowed_categories", [])
             if dept_allowed:
                 # 取交集：部门进行进一步限制
                 if cats:
-                    cats = cats & set(dept_allowed)
+                    cats: Any = cats & set(dept_allowed)
                 else:
-                    cats = set(dept_allowed)
+                    cats: set[Any] = set(dept_allowed)
             # 移除被拒绝的
             for denied in dept.get("denied_categories", []):
                 cats.discard(denied)
@@ -157,7 +157,7 @@ class PermissionEngine:
         if user.can_approve:
             return True
         for role_id in user.roles:
-            role = self._role_cache.get(role_id, {})
+            role: Skill | None = self._role_cache.get(role_id, {})
             if role.get("can_approve", False):
                 return True
         return False

@@ -6,8 +6,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.adapters.base import BusinessSystemAdapter, ToolDefinition, ToolResult
 
@@ -173,25 +173,25 @@ class ValueCardAdapter(BusinessSystemAdapter):
         Returns:
             包含储值卡 API 响应数据或错误信息的 ``ToolResult``。
         """
-        get_tools = {
+        get_tools: dict[str, Any] = {
             "query_balance": "/api/cards/balance",
             "query_consumption_records": "/api/cards/consumption",
             "query_card_coupons": "/api/cards/coupons",
             "query_card_rules": "/api/cards/rules",
         }
         if tool_name in get_tools:
-            data = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
+            data: dict[str, Any] = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
             return ToolResult(success=True, data=data)
         elif tool_name == "issue_card":
-            data = await self._http_request("POST", "/api/cards/issue", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request("POST", "/api/cards/issue", credential, json_body=arguments)
             return ToolResult(success=True, data=data)
         elif tool_name == "recharge_card":
-            data = await self._http_request("POST", "/api/cards/recharge", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request("POST", "/api/cards/recharge", credential, json_body=arguments)
             return ToolResult(success=True, data=data)
         elif tool_name == "refund_card":
-            data = await self._http_request("POST", "/api/cards/refund", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request("POST", "/api/cards/refund", credential, json_body=arguments)
             return ToolResult(success=True, data=data)
         elif tool_name == "reconciliation":
-            data = await self._http_request("POST", "/api/cards/reconciliation", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request("POST", "/api/cards/reconciliation", credential, json_body=arguments)
             return ToolResult(success=True, data=data)
         return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

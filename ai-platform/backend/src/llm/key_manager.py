@@ -5,6 +5,7 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 import threading
 from datetime import datetime, timezone
@@ -45,7 +46,7 @@ class APIKeyManager:
                 self._keys[provider] = []
                 self._rotation_index[provider] = 0
 
-            api_key = APIKey(
+            api_key: APIKey = APIKey(
                 key=key,
                 provider=provider,
                 label=label or f"{provider}-key-{len(self._keys[provider]) + 1}",
@@ -78,8 +79,8 @@ class APIKeyManager:
             LLMProviderError: 没有可用的健康 Key 时抛出。
         """
         with self._lock:
-            pool = self._keys.get(provider, [])
-            healthy_keys = [k for k in pool if k.is_active and k.is_healthy]
+            pool: Skill | None = self._keys.get(provider, [])
+            healthy_keys: list[Any] = [k for k in pool if k.is_active and k.is_healthy]
 
             if not healthy_keys:
                 logger.error("No healthy API keys available", provider=provider)
@@ -88,10 +89,10 @@ class APIKeyManager:
                     f"No healthy API keys available for provider '{provider}'",
                 )
 
-            idx = self._rotation_index.get(provider, 0) % len(healthy_keys)
+            idx: Any = self._rotation_index.get(provider, 0) % len(healthy_keys)
             self._rotation_index[provider] = (idx + 1) % len(healthy_keys)
 
-            selected = healthy_keys[idx]
+            selected: Any = healthy_keys[idx]
             logger.debug(
                 "API key selected",
                 provider=provider,
@@ -107,7 +108,7 @@ class APIKeyManager:
         该 Key 被标记为不健康并从活跃轮换中移除。
         """
         with self._lock:
-            pool = self._keys.get(provider, [])
+            pool: Skill | None = self._keys.get(provider, [])
             for api_key in pool:
                 if api_key.key == key:
                     api_key.mark_unhealthy()
@@ -123,7 +124,7 @@ class APIKeyManager:
     def record_success(self, provider: str, key: str) -> None:
         """记录某个 Key 的一次成功 API 调用。"""
         with self._lock:
-            pool = self._keys.get(provider, [])
+            pool: Skill | None = self._keys.get(provider, [])
             for api_key in pool:
                 if api_key.key == key:
                     api_key.record_success()
@@ -132,7 +133,7 @@ class APIKeyManager:
     def record_error(self, provider: str, key: str, error_message: str = "") -> None:
         """记录某个 Key 的一次失败 API 调用。"""
         with self._lock:
-            pool = self._keys.get(provider, [])
+            pool: Skill | None = self._keys.get(provider, [])
             for api_key in pool:
                 if api_key.key == key:
                     api_key.record_error(error_message)
@@ -141,7 +142,7 @@ class APIKeyManager:
     def get_key_stats(self, provider: str) -> list[dict]:
         """获取某个 provider 所有 Key 的统计信息。"""
         with self._lock:
-            pool = self._keys.get(provider, [])
+            pool: Skill | None = self._keys.get(provider, [])
             return [
                 {
                     "label": k.label,
@@ -158,13 +159,13 @@ class APIKeyManager:
     def get_healthy_key_count(self, provider: str) -> int:
         """返回某个 provider 的健康 Key 数量。"""
         with self._lock:
-            pool = self._keys.get(provider, [])
+            pool: Skill | None = self._keys.get(provider, [])
             return sum(1 for k in pool if k.is_active and k.is_healthy)
 
     def restore_key(self, provider: str, key: str) -> None:
         """将之前失效的 Key 恢复到活跃池中。"""
         with self._lock:
-            pool = self._keys.get(provider, [])
+            pool: Skill | None = self._keys.get(provider, [])
             for api_key in pool:
                 if api_key.key == key:
                     api_key.is_healthy = True

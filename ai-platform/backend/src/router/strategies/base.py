@@ -1,9 +1,9 @@
 """RoutingStrategy 抽象基类 — 定义策略接口契约。"""
 
 from __future__ import annotations
+from typing import Any
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 from src.router.models import RouteResult, SessionContext, UserRequest
 

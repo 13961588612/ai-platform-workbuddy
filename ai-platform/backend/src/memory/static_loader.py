@@ -12,9 +12,9 @@ StaticMemoryLoader — 从文件系统加载并缓存 Agent 静态记忆。
 """
 
 from __future__ import annotations
+from typing import Any
 
 from pathlib import Path
-from typing import Any
 
 import yaml
 from structlog import get_logger
@@ -86,10 +86,12 @@ class StaticMemoryLoader:
             组装后的静态记忆文本。如果 agent 没有记忆文件，
             则返回空字符串。
         """
-        cached = self._cache.get(agent_name)
+        cached: Skill | None = self._cache.get(agent_name)
         if cached is not None:
             return cached.content
 
+        content: str
+        mtime: float
         content, mtime = self._load_from_disk(agent_name)
         self._cache[agent_name] = _CachedStaticMemory(content, mtime)
         return content
@@ -109,8 +111,8 @@ class StaticMemoryLoader:
             如果缓存已失效（文件变更或尚未缓存）返回 ``True``，
             如果缓存内容仍然是最新的返回 ``False``。
         """
-        memory_dir = self._memory_dir(agent_name)
-        watched_files = self._discover_files(memory_dir)
+        memory_dir: Path = self._memory_dir(agent_name)
+        watched_files: list[Path] = self._discover_files(memory_dir)
         if not watched_files:
             # 完全没有文件 —— 如果之前缓存过则使其失效
             if agent_name in self._cache:
@@ -118,8 +120,8 @@ class StaticMemoryLoader:
                 return True
             return False
 
-        current_mtime = self._max_mtime(watched_files)
-        cached = self._cache.get(agent_name)
+        current_mtime: float = self._max_mtime(watched_files)
+        cached: Skill | None = self._cache.get(agent_name)
         if cached is None or current_mtime > cached.mtime:
             # 使其失效；下一次 load() 会重新读取
             self._cache.pop(agent_name, None)
@@ -159,17 +161,17 @@ class StaticMemoryLoader:
         files: list[Path] = []
 
         # 入口点配置
-        entry = memory_dir / "agent-memory.yaml"
+        entry: Any = memory_dir / "agent-memory.yaml"
         if entry.exists():
             files.append(entry)
 
         # 人格 markdown
-        personality = memory_dir / "personality.md"
+        personality: Any = memory_dir / "personality.md"
         if personality.exists():
             files.append(personality)
 
         # Facts 目录
-        facts_dir = memory_dir / "facts"
+        facts_dir: Any = memory_dir / "facts"
         if facts_dir.exists():
             for f in sorted(facts_dir.iterdir()):
                 if f.suffix in (".yaml", ".yml") and f.is_file():
@@ -188,8 +190,8 @@ class StaticMemoryLoader:
 
         返回 (组装文本, 最大 mtime) 的元组。
         """
-        memory_dir = self._memory_dir(agent_name)
-        files = self._discover_files(memory_dir)
+        memory_dir: Path = self._memory_dir(agent_name)
+        files: list[Path] = self._discover_files(memory_dir)
 
         if not files:
             logger.debug(
@@ -202,31 +204,31 @@ class StaticMemoryLoader:
         parts: list[str] = []
 
         # 1. 解析入口点 YAML 以确定要包含哪些字段
-        entry_path = memory_dir / "agent-memory.yaml"
+        entry_path: Any = memory_dir / "agent-memory.yaml"
         fields_order: list[str] = []
         if entry_path.exists():
-            entry_data = self._read_yaml(entry_path)
-            fields_order = self._parse_fields(entry_data)
+            entry_data: dict[str, Any] = self._read_yaml(entry_path)
+            fields_order: list[str] = self._parse_fields(entry_data)
 
         # 2. 加载 personality.md
-        personality_path = memory_dir / "personality.md"
-        personality_text = ""
+        personality_path: Any = memory_dir / "personality.md"
+        personality_text: str = ""
         if personality_path.exists():
-            personality_text = self._read_text(personality_path)
+            personality_text: str = self._read_text(personality_path)
             if personality_text:
                 parts.append("# 角色人格\n")
                 parts.append(personality_text.strip())
                 parts.append("\n")
 
         # 3. 加载 facts/*.yaml
-        facts_dir = memory_dir / "facts"
+        facts_dir: Any = memory_dir / "facts"
         if facts_dir.exists():
-            fact_files = sorted(
+            fact_files: Any = sorted(
                 f for f in facts_dir.iterdir()
                 if f.suffix in (".yaml", ".yml") and f.is_file()
             )
             for fact_file in fact_files:
-                fact_text = self._render_yaml_as_text(fact_file)
+                fact_text: str = self._render_yaml_as_text(fact_file)
                 if fact_text:
                     parts.append(fact_text)
 
@@ -239,8 +241,8 @@ class StaticMemoryLoader:
                 elif f.suffix in (".yaml", ".yml") and f.name != "agent-memory.yaml":
                     parts.append(self._render_yaml_as_text(f))
 
-        content = "\n\n".join(p for p in parts if p.strip())
-        max_mtime = self._max_mtime(files)
+        content: str = "\n\n".join(p for p in parts if p.strip())
+        max_mtime: float = self._max_mtime(files)
         logger.debug(
             "Static memory loaded from disk",
             agent_name=agent_name,
@@ -276,12 +278,12 @@ class StaticMemoryLoader:
         每个顶级键成为一个章节标题；嵌套的键/值以 ``key: value``
         行或子章节的形式呈现。
         """
-        data = cls._read_yaml(path)
+        data: dict[str, Any] = cls._read_yaml(path)
         if not data:
             return ""
 
         lines: list[str] = []
-        section_title = path.stem.replace("_", " ").replace("-", " ").title()
+        section_title: Any = path.stem.replace("_", " ").replace("-", " ").title()
         lines.append(f"# {section_title}")
         cls._render_yaml_node(data, lines, indent=0)
         return "\n".join(lines)
@@ -294,7 +296,7 @@ class StaticMemoryLoader:
         indent: int,
     ) -> None:
         """递归将 YAML 数据节点呈现为缩进的文本行。"""
-        prefix = "  " * indent
+        prefix: Any = "  " * indent
         if isinstance(node, dict):
             for key, value in node.items():
                 if isinstance(value, dict):
@@ -332,7 +334,7 @@ class StaticMemoryLoader:
 
         返回字段名称列表（默认为 ``["personality", "facts"]``）。
         """
-        fields = entry_data.get("fields", [])
+        fields: Skill | None = entry_data.get("fields", [])
         if isinstance(fields, list):
             return [str(f) for f in fields]
         return ["personality", "facts"]

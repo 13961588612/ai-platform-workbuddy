@@ -8,7 +8,7 @@ SkillGrouper — 按业务系统对 Skills 进行分类和分组。
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import structlog
 
@@ -85,21 +85,21 @@ class SkillGrouper:
         if skill.category and skill.category != SkillCategory.BUILT_IN:
             return skill.category
 
-        tag_set = set(skill.tags)
+        tag_set: set[Any] = set(skill.tags)
         # 同时从名称/描述中提取单词以进行更广泛的匹配
-        words = set()
+        words: set[Any] = set()
         for text in (skill.name, skill.description):
             for char_group in text:
                 words.add(char_group)
         tag_set |= words
 
-        best_category = SkillCategory.BUILT_IN
-        best_overlap = 0
+        best_category: Any = SkillCategory.BUILT_IN
+        best_overlap: int = 0
         for cat, keywords in _CATEGORY_KEYWORDS.items():
-            overlap = len(tag_set & keywords)
+            overlap: Any = len(tag_set & keywords)
             if overlap > best_overlap:
-                best_overlap = overlap
-                best_category = cat
+                best_overlap: Any = overlap
+                best_category: Any = cat
 
         return best_category
 
@@ -116,7 +116,7 @@ class SkillGrouper:
             return None
 
         # 仅当至少有一个分类超过阈值时才过滤
-        big_categories = [
+        big_categories: list[Any] = [
             cat for cat in user_categories if self.should_filter_by_category(cat)
         ]
         if not big_categories:

@@ -1,10 +1,10 @@
 """数据库 Session 管理 —— 异步引擎 + Session 工厂。"""
 
 from __future__ import annotations
+from typing import Any
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -25,7 +25,7 @@ def get_engine() -> AsyncEngine:
     """返回异步 SQLAlchemy 引擎（单例）。"""
     global _engine
     if _engine is None:
-        settings = get_settings()
+        settings: Settings = get_settings()
         _engine = create_async_engine(
             settings.postgres_dsn,
             echo=settings.DEBUG,
@@ -58,7 +58,7 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
         async def list_items(db: AsyncSession = Depends(get_db_session)):
             ...
     """
-    factory = get_session_factory()
+    factory: async_sessionmaker[AsyncSession] = get_session_factory()
     async with factory() as session:
         try:
             yield session
@@ -73,7 +73,7 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
 @asynccontextmanager
 async def db_session_context() -> AsyncIterator[AsyncSession]:
     """在 FastAPI 依赖项之外获取数据库 Session 的上下文管理器。"""
-    factory = get_session_factory()
+    factory: async_sessionmaker[AsyncSession] = get_session_factory()
     async with factory() as session:
         try:
             yield session
@@ -87,7 +87,7 @@ async def db_session_context() -> AsyncIterator[AsyncSession]:
 
 async def init_db() -> None:
     """创建所有表（仅用于开发 —— 生产环境请使用 Alembic）。"""
-    engine = get_engine()
+    engine: AsyncEngine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

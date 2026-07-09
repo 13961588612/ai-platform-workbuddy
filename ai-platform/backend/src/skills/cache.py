@@ -61,20 +61,20 @@ class HotSkillCache:
         Returns:
             十六进制哈希字符串，用作 Redis 键后缀。
         """
-        raw = f"{query}:{','.join(categories or [])}"
+        raw: str = f"{query}:{','.join(categories or [])}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     async def get_query_result(
         self, query: str, categories: list[str] | None = None
     ) -> list[SkillScore] | None:
         """返回 *query* 的缓存 Top-N 结果，缓存未命中时返回 ``None``。"""
-        key = f"skill:query:{self._query_hash(query, categories)}"
-        raw = await self._redis.get(key)
+        key: str = f"skill:query:{self._query_hash(query, categories)}"
+        raw: Skill | None = await self._redis.get(key)
         if raw is None:
             return None
         from src.skills.models import SkillScore
 
-        data = json.loads(raw)
+        data: Any = json.loads(raw)
         return [SkillScore.model_validate(item) for item in data]
 
     async def set_query_result(
@@ -92,8 +92,8 @@ class HotSkillCache:
             categories: 可选的分类过滤列表。
             ttl: 覆盖默认 TTL（秒）；``None`` 时使用实例配置。
         """
-        key = f"skill:query:{self._query_hash(query, categories)}"
-        payload = json.dumps(
+        key: str = f"skill:query:{self._query_hash(query, categories)}"
+        payload: str = json.dumps(
             [r.model_dump(mode="json") for r in results], ensure_ascii=False
         )
         await self._redis.set(key, payload, ex=ttl or self._query_ttl)
@@ -102,7 +102,7 @@ class HotSkillCache:
 
     async def get_skill(self, skill_id: str) -> Skill | None:
         """返回缓存的 Skill 元数据，缓存未命中时返回 ``None``。"""
-        raw = await self._redis.get(f"skill:meta:{skill_id}")
+        raw: Skill | None = await self._redis.get(f"skill:meta:{skill_id}")
         if raw is None:
             return None
         from src.skills.models import Skill
@@ -140,7 +140,7 @@ class HotSkillCache:
         Returns:
             Schema 字典，或 ``None``。
         """
-        raw = await self._redis.get(f"skill_schema:{skill_id}")
+        raw: Skill | None = await self._redis.get(f"skill_schema:{skill_id}")
         if raw is None:
             return None
         return json.loads(raw)
@@ -178,7 +178,7 @@ class HotSkillCache:
         *skills* 应为与热门 Skill ID 对应的完整 Skill 对象。
         返回已预热的 Skill 数量。
         """
-        count = 0
+        count: int = 0
         for skill in skills:
             await self.set_skill(skill, ttl=self._meta_ttl)
             count += 1

@@ -5,12 +5,12 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
 
 import structlog
 
@@ -83,9 +83,9 @@ def _resolve_log_path(log_file: str) -> Path:
     Returns:
         绝对路径对象。
     """
-    path = Path(log_file)
+    path: Path = Path(log_file)
     if not path.is_absolute():
-        path = Path.cwd() / path
+        path: Any = Path.cwd() / path
     return path
 
 
@@ -99,7 +99,7 @@ def _has_file_handler(root: logging.Logger, log_path: Path) -> bool:
     Returns:
         若已存在指向该文件的 ``RotatingFileHandler`` 则返回 ``True``。
     """
-    target = log_path.resolve()
+    target: Path = log_path.resolve()
     for handler in root.handlers:
         if isinstance(handler, RotatingFileHandler):
             if Path(handler.baseFilename).resolve() == target:
@@ -109,13 +109,13 @@ def _has_file_handler(root: logging.Logger, log_path: Path) -> bool:
 
 def _setup_file_handler(log_file: str, max_bytes: int, backup_count: int) -> Path | None:
     """为 root logger 添加轮转文件 Handler。"""
-    log_path = _resolve_log_path(log_file)
-    root = logging.getLogger()
+    log_path: Path = _resolve_log_path(log_file)
+    root: Any = logging.getLogger()
     if _has_file_handler(root, log_path):
         return log_path
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    file_handler = RotatingFileHandler(
+    file_handler: RotatingFileHandler = RotatingFileHandler(
         log_path,
         maxBytes=max_bytes,
         backupCount=backup_count,
@@ -134,9 +134,9 @@ def configure_logging(log_level: LogLevel | None = None, json_format: bool | Non
         log_level: 覆盖 settings 中的日志级别。
         json_format: 覆盖日志格式（True=JSON，False=控制台）。
     """
-    settings = get_settings()
-    level = log_level or settings.LOG_LEVEL
-    use_json = json_format if json_format is not None else (settings.LOG_FORMAT == "json")
+    settings: Settings = get_settings()
+    level: Any = log_level or settings.LOG_LEVEL
+    use_json: Any = json_format if json_format is not None else (settings.LOG_FORMAT == "json")
 
     logging.basicConfig(
         format="%(message)s",
@@ -153,11 +153,11 @@ def configure_logging(log_level: LogLevel | None = None, json_format: bool | Non
         cache_logger_on_first_use=True,
     )
 
-    log_file = (settings.LOG_FILE or "").strip()
+    log_file: str = (settings.LOG_FILE or "").strip()
     if not log_file:
         return
 
-    log_path = _setup_file_handler(
+    log_path: Path | None = _setup_file_handler(
         log_file,
         max_bytes=settings.LOG_MAX_BYTES,
         backup_count=settings.LOG_BACKUP_COUNT,

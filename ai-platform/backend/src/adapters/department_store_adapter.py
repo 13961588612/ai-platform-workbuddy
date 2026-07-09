@@ -6,8 +6,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.adapters.base import BusinessSystemAdapter, ToolDefinition, ToolResult
 
@@ -155,7 +155,7 @@ class DepartmentStoreAdapter(BusinessSystemAdapter):
         Returns:
             包含百货 API 响应数据或错误信息的 ``ToolResult``。
         """
-        route_map = {
+        route_map: dict[str, Any] = {
             "query_counters": ("GET", "/api/counters"),
             "query_brands": ("GET", "/api/brands"),
             "query_contracts": ("GET", "/api/contracts"),
@@ -165,7 +165,9 @@ class DepartmentStoreAdapter(BusinessSystemAdapter):
             "query_sales_efficiency": ("GET", "/api/efficiency"),
         }
         if tool_name in route_map:
+            method: str
+            path: str
             method, path = route_map[tool_name]
-            data = await self._http_request(method, path, credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(method, path, credential, params=arguments)
             return ToolResult(success=True, data=data)
         return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

@@ -13,7 +13,7 @@ class DeepSeekAdapter(OpenAISDKAdapter):
 
     def __init__(self) -> None:
         """从配置加载 DeepSeek API 端点与超时并初始化 OpenAI SDK 客户端。"""
-        settings = get_settings()
+        settings: Settings = get_settings()
         super().__init__(
             base_url=settings.DEEPSEEK_API_ENDPOINT,
             timeout=settings.LLM_REQUEST_TIMEOUT,

@@ -1,9 +1,9 @@
 """根据平台的 AgentConfig 构建原生 OpenHarness QueryEngine。"""
 
 from __future__ import annotations
+from typing import Any
 
 from pathlib import Path
-from typing import Any
 
 from openharness.config.settings import PermissionSettings, load_settings
 from openharness.engine.query_engine import QueryEngine
@@ -35,7 +35,7 @@ def agent_mcp_to_openharness_configs(
     for server in mcp_servers:
         if not server.enabled:
             continue
-        transport = server.transport.strip().lower()
+        transport: str = server.transport.strip().lower()
         if transport in {"http", "streamable_http", "streamable-http", "sse"}:
             if not server.endpoint:
                 logger.warning("MCP server missing endpoint", name=server.name)
@@ -45,7 +45,7 @@ def agent_mcp_to_openharness_configs(
                 headers={},
             )
         elif transport == "stdio":
-            command = server.command or server.endpoint
+            command: Any = server.command or server.endpoint
             if not command:
                 logger.warning("MCP stdio server missing command", name=server.name)
                 continue
@@ -64,21 +64,23 @@ def resolve_extra_skill_dirs(config: AgentConfig, config_base: Path) -> list[str
     OpenHarness 期望目录结构为 ``<extra_skill_dir>/<skill-name>/SKILL.md``。
     我们传入业务分类目录（例如 packages/crm）。
     """
-    packages_root = config_base / "skills" / "packages"
+    packages_root: Any = config_base / "skills" / "packages"
     if not packages_root.is_dir():
         return []
 
-    enabled_ids = {ref.skill_id for ref in config.skills if ref.enabled}
+    enabled_ids: set[Any] = {ref.skill_id for ref in config.skills if ref.enabled}
     if not enabled_ids:
         return []
 
     category_dirs: set[str] = set()
     for skill_md in packages_root.rglob("SKILL.md"):
-        category_dir = skill_md.parent.parent
+        category_dir: Any = skill_md.parent.parent
         if category_dir == packages_root:
             continue
+        metadata: dict[str, Any]
+        _: str
         metadata, _ = read_skill_metadata(skill_md)
-        skill_id = resolve_skill_id(metadata, skill_md.parent.name)
+        skill_id: str = resolve_skill_id(metadata, skill_md.parent.name)
         if skill_id in enabled_ids:
             category_dirs.add(str(category_dir.resolve()))
 
@@ -87,8 +89,8 @@ def resolve_extra_skill_dirs(config: AgentConfig, config_base: Path) -> list[str
 
 async def connect_mcp_manager(config: AgentConfig) -> McpClientManager:
     """根据 agent config 创建并连接 OpenHarness MCP 管理器。"""
-    mcp_configs = agent_mcp_to_openharness_configs(config.mcp_servers)
-    mcp_manager = McpClientManager(mcp_configs)
+    mcp_configs: dict[str, McpServerConfig] = agent_mcp_to_openharness_configs(config.mcp_servers)
+    mcp_manager: McpClientManager = McpClientManager(mcp_configs)
     await mcp_manager.connect_all()
     return mcp_manager
 
@@ -103,16 +105,16 @@ async def build_native_query_engine(
     dept: str = "",
 ) -> QueryEngine:
     """使用原生 SkillTool + MCP 工具组装 OpenHarness QueryEngine。"""
-    settings = load_settings()
-    config_base = Path(get_settings().CONFIG_BASE_PATH)
-    cwd = str(config_base.resolve())
-    extra_skill_dirs = resolve_extra_skill_dirs(config, config_base)
+    settings: Any = load_settings()
+    config_base: Path = Path(get_settings().CONFIG_BASE_PATH)
+    cwd: str = str(config_base.resolve())
+    extra_skill_dirs: list[str] = resolve_extra_skill_dirs(config, config_base)
 
-    mcp_configs = agent_mcp_to_openharness_configs(config.mcp_servers)
-    allowed_tools = config.runtime.allowed_tools if config.runtime else []
-    source_registry = create_agent_source_registry(mcp_manager)
-    allowed_patterns = allowed_tools or ["skill", "mcp__*"]
-    concrete_allowed = [
+    mcp_configs: dict[str, McpServerConfig] = agent_mcp_to_openharness_configs(config.mcp_servers)
+    allowed_tools: Any = config.runtime.allowed_tools if config.runtime else []
+    source_registry: ToolRegistry = create_agent_source_registry(mcp_manager)
+    allowed_patterns: Any = allowed_tools or ["skill", "mcp__*"]
+    concrete_allowed: list[Any] = [
         tool.name
         for tool in source_registry.list_tools()
         if is_tool_allowed(tool.name, allowed_patterns)
@@ -121,26 +123,26 @@ async def build_native_query_engine(
         mode=PermissionMode.FULL_AUTO,
         allowed_tools=concrete_allowed,
     )
-    tool_registry = create_platform_tool_registry(mcp_manager, allowed_tools)
+    tool_registry: ToolRegistry = create_platform_tool_registry(mcp_manager, allowed_tools)
 
-    model = config.model.primary if config.model else "deepseek-v4-flash"
-    runtime_params = config.runtime.params if config.runtime else {}
-    max_tokens = int(runtime_params.get("maxTokens", 4096))
-    max_steps = int(runtime_params.get("maxSteps", 20))
-    temperature = float(runtime_params.get("temperature", 0.7))
+    model: Any = config.model.primary if config.model else "deepseek-v4-flash"
+    runtime_params: Any = config.runtime.params if config.runtime else {}
+    max_tokens: int = int(runtime_params.get("maxTokens", 4096))
+    max_steps: int = int(runtime_params.get("maxSteps", 20))
+    temperature: float = float(runtime_params.get("temperature", 0.7))
 
-    oh_system_prompt = build_runtime_system_prompt(
+    oh_system_prompt: Any = build_runtime_system_prompt(
         settings,
         cwd=cwd,
         extra_skill_dirs=extra_skill_dirs,
         include_project_memory=False,
     )
-    agent_prompt = config.system_prompt or ""
+    agent_prompt: Any = config.system_prompt or ""
     if config.runtime and config.runtime.prompts.get("system_prompt"):
-        agent_prompt = config.runtime.prompts["system_prompt"]
-    system_prompt = "\n\n".join(part for part in (agent_prompt, oh_system_prompt) if part).strip()
+        agent_prompt: Any = config.runtime.prompts["system_prompt"]
+    system_prompt: str = "\n\n".join(part for part in (agent_prompt, oh_system_prompt) if part).strip()
 
-    api_client = GatewayApiClient(
+    api_client: GatewayApiClient = GatewayApiClient(
         gateway,
         model=model,
         temperature=temperature,
@@ -150,7 +152,7 @@ async def build_native_query_engine(
         dept=dept,
     )
 
-    engine = QueryEngine(
+    engine: QueryEngine = QueryEngine(
         api_client=api_client,
         tool_registry=tool_registry,
         permission_checker=PermissionChecker(settings.permission),

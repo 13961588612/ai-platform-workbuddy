@@ -4,10 +4,10 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 import contextlib
 from enum import Enum
-from typing import Any
 
 import httpx
 import structlog
@@ -56,12 +56,12 @@ def _call_result_to_dict(result: Any) -> dict[str, Any]:
         含 ``content`` 及可选 ``text`` 字段的结果字典。
     """
     if hasattr(result, "model_dump"):
-        data = result.model_dump(mode="json", exclude_none=True)
+        data: dict[str, Any] = result.model_dump(mode="json", exclude_none=True)
     else:
-        data = dict(result)
+        data: dict[str, Any] = dict(result)
     # 将 text 内容块展平，方便下游使用
     if "content" in data and isinstance(data["content"], list):
-        texts = [
+        texts: list[Any] = [
             block.get("text", "")
             for block in data["content"]
             if isinstance(block, dict) and block.get("type") == "text"
@@ -119,9 +119,9 @@ class MCPClient:
         if self._connected and self._session is not None:
             return
 
-        stack = contextlib.AsyncExitStack()
+        stack: AsyncExitStack = contextlib.AsyncExitStack()
         try:
-            session = await self._open_session(stack)
+            session: ClientSession = await self._open_session(stack)
             await session.initialize()
             self._exit_stack = stack
             self._session = session
@@ -148,11 +148,13 @@ class MCPClient:
             已就绪、尚未 ``initialize`` 的 ``ClientSession``。
         """
         if self._transport == MCPTransportType.STDIO:
-            params = StdioServerParameters(
+            params: StdioServerParameters = StdioServerParameters(
                 command=self._endpoint,
                 args=self._args,
                 env=self._env or None,
             )
+            read: Any
+            write: Any
             read, write = await stack.enter_async_context(stdio_client(params))
         elif self._transport == MCPTransportType.SSE:
             read, write = await stack.enter_async_context(
@@ -163,7 +165,7 @@ class MCPClient:
                 )
             )
         elif self._transport == MCPTransportType.HTTP:
-            http_client = create_mcp_http_client(
+            http_client: Any = create_mcp_http_client(
                 timeout=httpx.Timeout(self._timeout, read=max(self._timeout * 2, 60.0)),
             )
             await stack.enter_async_context(http_client)
@@ -197,8 +199,8 @@ class MCPClient:
         if self._tools_cache is not None:
             return self._tools_cache
 
-        result = await self._session.list_tools()
-        tools = [_tool_to_dict(tool) for tool in result.tools]
+        result: dict[str, Any] = await self._session.list_tools()
+        tools: list[Any] = [_tool_to_dict(tool) for tool in result.tools]
         self._tools_cache = tools
         return tools
 
@@ -209,7 +211,7 @@ class MCPClient:
         if not self._session:
             raise MCPClientError(f"Not connected to {self._server_name}")
 
-        result = await self._session.call_tool(tool_name, arguments or {})
+        result: dict[str, Any] = await self._session.call_tool(tool_name, arguments or {})
         return _call_result_to_dict(result)
 
     async def health_check(self) -> bool:

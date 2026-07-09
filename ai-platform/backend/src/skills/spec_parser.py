@@ -8,10 +8,10 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 import re
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -32,20 +32,20 @@ def parse_front_matter(content: str) -> tuple[dict[str, Any], str]:
 
     返回 (metadata, body)。
     """
-    match = _FRONT_MATTER_RE.match(content)
+    match: Any = _FRONT_MATTER_RE.match(content)
     if not match:
         return {}, content.strip()
 
-    raw_yaml = match.group(1)
-    body = content[match.end() :].strip()
+    raw_yaml: Any = match.group(1)
+    body: str = content[match.end() :].strip()
     try:
-        metadata = yaml.safe_load(raw_yaml) or {}
+        metadata: Any = yaml.safe_load(raw_yaml) or {}
     except yaml.YAMLError as exc:
         logger.warning("SKILL.md Front Matter 解析失败", error=str(exc))
-        metadata = {}
+        metadata: dict[str, Any] = {}
 
     if not isinstance(metadata, dict):
-        metadata = {}
+        metadata: dict[str, Any] = {}
     return metadata, body
 
 
@@ -60,11 +60,13 @@ def read_skill_metadata(skill_md: Path) -> tuple[dict[str, Any], str]:
 
     try:
         with open(skill_md, encoding="utf-8") as f:
-            head = f.read(_METADATA_READ_BYTES)
+            head: Any = f.read(_METADATA_READ_BYTES)
     except OSError as exc:
         logger.error("读取 SKILL.md 失败", path=str(skill_md), error=str(exc))
         return {}, ""
 
+    metadata: dict[str, Any]
+    _: str
     metadata, _ = parse_front_matter(head)
     return metadata, ""
 
@@ -75,7 +77,7 @@ def read_skill_full(skill_md: Path) -> tuple[dict[str, Any], str]:
         return {}, ""
 
     try:
-        content = skill_md.read_text(encoding="utf-8")
+        content: str = skill_md.read_text(encoding="utf-8")
     except OSError as exc:
         logger.error("读取 SKILL.md 失败", path=str(skill_md), error=str(exc))
         return {}, ""
@@ -91,7 +93,7 @@ def list_package_attachments(package_dir: Path) -> dict[str, list[str]]:
         "assets": [],
     }
     for subdir in ("scripts", "references", "assets"):
-        folder = package_dir / subdir
+        folder: Any = package_dir / subdir
         if not folder.is_dir():
             continue
         for path in sorted(folder.rglob("*")):
@@ -106,7 +108,7 @@ def resolve_skill_id(metadata: dict[str, Any], package_name: str) -> str:
 
     优先 front matter 中的 skill_id，其次 name，最后使用目录名。
     """
-    skill_id = metadata.get("skill_id") or metadata.get("name") or package_name
+    skill_id: Any = metadata.get("skill_id") or metadata.get("name") or package_name
     return str(skill_id)
 
 

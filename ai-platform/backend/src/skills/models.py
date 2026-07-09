@@ -6,11 +6,11 @@ Skills 子系统 Pydantic 模型。
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -107,7 +107,7 @@ class Skill(BaseModel):
         若正文未加载，仅返回 description。
         """
         if self.body_loaded and self.body:
-            parts = [self.body]
+            parts: list[Any] = [self.body]
             if self.references:
                 parts.append("\n## 参考资料\n" + "\n".join(f"- {p}" for p in self.references))
             if self.scripts:
@@ -119,7 +119,7 @@ class Skill(BaseModel):
         """按需读取 references/ 或 scripts/ 下的附件内容。"""
         if not self.package_dir:
             return None
-        target = Path(self.package_dir) / relative_path
+        target: Any = Path(self.package_dir) / relative_path
         if not target.is_file():
             return None
         try:
@@ -129,9 +129,9 @@ class Skill(BaseModel):
 
     def index_text(self) -> str:
         """返回用于向量索引的文本（元数据阶段即可生成）。"""
-        parts = [self.name, self.description, " ".join(self.tags), self.category]
-        schema = self.parameters
-        properties = schema.get("properties", {}) if isinstance(schema, dict) else {}
+        parts: list[Any] = [self.name, self.description, " ".join(self.tags), self.category]
+        schema: Any = self.parameters
+        properties: Skill | None | dict[str, Any] = schema.get("properties", {}) if isinstance(schema, dict) else {}
         for param_name, param_def in properties.items():
             if isinstance(param_def, dict):
                 parts.append(f"{param_name} {param_def.get('description', '')}")

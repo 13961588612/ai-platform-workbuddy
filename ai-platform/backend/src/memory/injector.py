@@ -18,10 +18,10 @@ MemoryInjector — 将记忆编织到 Agent 运行生命周期中的中间件。
 """
 
 from __future__ import annotations
+from typing import Any
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
 
 import structlog
 
@@ -161,10 +161,10 @@ class MemoryInjector:
         parts: list[str] = []
 
         # 解析每个 agent 的记忆配置（回退到全局设置）
-        mc = context.memory_config
-        static_enabled = mc.static_enabled if mc else True
-        dynamic_enabled = mc.dynamic_enabled if mc else self._dynamic_enabled
-        top_k = mc.top_k if mc else self._default_top_k
+        mc: Any = context.memory_config
+        static_enabled: Any = mc.static_enabled if mc else True
+        dynamic_enabled: Any = mc.dynamic_enabled if mc else self._dynamic_enabled
+        top_k: Any = mc.top_k if mc else self._default_top_k
 
         # 1. System prompt
         if context.system_prompt:
@@ -172,13 +172,15 @@ class MemoryInjector:
 
         # 2. 静态记忆
         if static_enabled:
-            static_text = self._load_static(context.agent_name)
+            static_text: str = self._load_static(context.agent_name)
             context.static_memory = static_text
             if static_text:
                 parts.append(static_text.strip())
 
         # 3. 动态记忆 Top-K
         if dynamic_enabled:
+            dynamic_text: str
+            dynamic_entries: list[dict[str, Any]]
             dynamic_text, dynamic_entries = await self._retrieve_dynamic(
                 context, top_k
             )
@@ -187,7 +189,7 @@ class MemoryInjector:
                 parts.append(dynamic_text.strip())
 
         # 4. 对话历史
-        history_text = self._format_history(context.messages)
+        history_text: str = self._format_history(context.messages)
         if history_text:
             parts.append(history_text.strip())
 
@@ -223,9 +225,9 @@ class MemoryInjector:
         Args:
             context: 运行上下文，其 ``assistant_response`` 已被填充。
         """
-        mc = context.memory_config
-        dynamic_enabled = mc.dynamic_enabled if mc else self._dynamic_enabled
-        write_back = mc.write_back if mc else True
+        mc: Any = context.memory_config
+        dynamic_enabled: Any = mc.dynamic_enabled if mc else self._dynamic_enabled
+        write_back: Any = mc.write_back if mc else True
 
         if not dynamic_enabled or not write_back:
             return
@@ -234,13 +236,13 @@ class MemoryInjector:
             return
 
         # 构建用于提取的对话记录
-        transcript = self._build_transcript(context)
+        transcript: str = self._build_transcript(context)
         if not transcript.strip():
             return
 
         # 调用 LLM 进行提取
         try:
-            extracted = await self._extract_memories(transcript)
+            extracted: list[ExtractedMemory] = await self._extract_memories(transcript)
         except Exception:
             logger.exception(
                 "Memory extraction LLM call failed",
@@ -258,7 +260,7 @@ class MemoryInjector:
             return
 
         # 持久化提取的记忆
-        written = await self._memory_manager.write_extracted_memories(
+        written: int = await self._memory_manager.write_extracted_memories(
             agent_name=context.agent_name,
             user_id=context.user_id,
             session_id=context.session_id,
@@ -303,7 +305,7 @@ class MemoryInjector:
         返回 (格式化文本, 原始条目) 的元组。
         """
         try:
-            results = await self._memory_manager.retrieve_dynamic_memory(
+            results: list[MemorySearchResult] = await self._memory_manager.retrieve_dynamic_memory(
                 query=context.query,
                 agent_name=context.agent_name,
                 user_id=context.user_id,
@@ -323,14 +325,14 @@ class MemoryInjector:
 
         # 按 importance 排序（已按综合分数排序，但为上下文展示按
         # importance 重新排序）
-        sorted_results = sorted(
+        sorted_results: Any = sorted(
             results, key=lambda r: r.entry.importance, reverse=True
         )
 
         entries: list[dict[str, Any]] = []
         lines: list[str] = ["# 相关记忆"]
         for r in sorted_results:
-            entry = r.entry
+            entry: Any = r.entry
             entries.append(
                 {
                     "id": entry.id,
@@ -342,7 +344,7 @@ class MemoryInjector:
                     "composite_score": r.composite_score,
                 }
             )
-            scope_label = "用户级" if entry.is_user_level else "会话级"
+            scope_label: str = "用户级" if entry.is_user_level else "会话级"
             lines.append(
                 f"- [{entry.memory_type.value}] ({scope_label}, 重要度:{entry.importance:.2f}) "
                 f"{entry.content}"
@@ -361,9 +363,9 @@ class MemoryInjector:
             return ""
         lines: list[str] = ["# 对话历史"]
         for msg in messages:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            role_label = {
+            role: Skill | None = msg.get("role", "unknown")
+            content: Skill | None = msg.get("content", "")
+            role_label: Skill | None = {
                 "user": "用户",
                 "assistant": "助手",
                 "system": "系统",
@@ -385,10 +387,10 @@ class MemoryInjector:
         lines: list[str] = []
 
         # 包含最近的历史（有限制）
-        recent = context.messages[-_MAX_EXTRACTION_MESSAGES:]
+        recent: Any = context.messages[-_MAX_EXTRACTION_MESSAGES:]
         for msg in recent:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
+            role: Skill | None = msg.get("role", "unknown")
+            content: Skill | None = msg.get("content", "")
             lines.append(f"[{role}] {content}")
 
         # 始终包含当前的查询和响应
@@ -406,9 +408,9 @@ class MemoryInjector:
         使用 LLMGateway 配合轻量级提取 prompt。响应被解析为记忆对象
         的 JSON 数组。
         """
-        gateway = get_llm_gateway()
+        gateway: LLMGateway = get_llm_gateway()
 
-        messages = [
+        messages: list[LLMMessage] = [
             LLMMessage(
                 role=LLMRole.SYSTEM,
                 content=_EXTRACTION_SYSTEM_PROMPT,
@@ -419,7 +421,7 @@ class MemoryInjector:
             ),
         ]
 
-        request = LLMRequest(
+        request: LLMRequest = LLMRequest(
             messages=messages,
             model=_EXTRACTION_MODEL,
             temperature=0.3,
@@ -429,8 +431,8 @@ class MemoryInjector:
             session_id="",
         )
 
-        response = await gateway.chat(request)
-        raw_content = response.content.strip()
+        response: LLMResponse = await gateway.chat(request)
+        raw_content: str = response.content.strip()
 
         # 从 LLM 响应中解析 JSON 数组
         return self._parse_extraction_response(raw_content)
@@ -446,26 +448,26 @@ class MemoryInjector:
             return []
 
         # 如果存在则去除 markdown 代码块
-        cleaned = raw.strip()
+        cleaned: str = raw.strip()
         if cleaned.startswith("```"):
             # 移除第一行（```json 或 ```）和最后一行的 ```
-            lines = cleaned.split("\n")
+            lines: Any = cleaned.split("\n")
             if lines[0].startswith("```"):
-                lines = lines[1:]
+                lines: Any = lines[1:]
             if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            cleaned = "\n".join(lines)
+                lines: Any = lines[:-1]
+            cleaned: str = "\n".join(lines)
 
         # 找到 JSON 数组边界
-        start = cleaned.find("[")
-        end = cleaned.rfind("]")
+        start: Any = cleaned.find("[")
+        end: Any = cleaned.rfind("]")
         if start == -1 or end == -1 or end <= start:
             logger.debug("No JSON array found in extraction response", raw=raw[:200])
             return []
 
-        json_str = cleaned[start : end + 1]
+        json_str: Any = cleaned[start : end + 1]
         try:
-            items = json.loads(json_str)
+            items: Any = json.loads(json_str)
         except json.JSONDecodeError as exc:
             logger.warning(
                 "Failed to parse extraction JSON",
@@ -481,20 +483,20 @@ class MemoryInjector:
         for item in items:
             if not isinstance(item, dict):
                 continue
-            memory_type_str = item.get("memory_type", "context")
-            content = item.get("content", "")
-            importance = item.get("importance", 0.5)
+            memory_type_str: Skill | None = item.get("memory_type", "context")
+            content: Skill | None = item.get("content", "")
+            importance: Skill | None = item.get("importance", 0.5)
             if not content or not isinstance(content, str):
                 continue
             try:
-                importance = float(importance)
+                importance: float = float(importance)
             except (ValueError, TypeError):
-                importance = 0.5
-            importance = max(0.0, min(1.0, importance))
+                importance: float = 0.5
+            importance: Any = max(0.0, min(1.0, importance))
             try:
-                memory_type = MemoryType(memory_type_str)
+                memory_type: MemoryType = MemoryType(memory_type_str)
             except ValueError:
-                memory_type = MemoryType.CONTEXT
+                memory_type: Any = MemoryType.CONTEXT
             results.append(
                 ExtractedMemory(
                     memory_type=memory_type,

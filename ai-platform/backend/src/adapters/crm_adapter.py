@@ -6,8 +6,8 @@ CRM 系统适配器 — 将 CRM 系统 API 封装为 MCP 工具。
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.adapters.base import BusinessSystemAdapter, ToolDefinition, ToolResult
 
@@ -170,7 +170,7 @@ class CRMAdapter(BusinessSystemAdapter):
         Returns:
             包含 CRM API 响应数据或错误信息的 ``ToolResult``。
         """
-        get_tools = {
+        get_tools: dict[str, Any] = {
             "query_member": "/api/members",
             "query_member_points": "/api/members/points",
             "query_member_tier": "/api/members/tier",
@@ -179,12 +179,12 @@ class CRMAdapter(BusinessSystemAdapter):
             "query_customer_journey": "/api/members/journey",
         }
         if tool_name in get_tools:
-            data = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
+            data: dict[str, Any] = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
             return ToolResult(success=True, data=data)
         elif tool_name == "adjust_member_points":
-            data = await self._http_request("POST", "/api/members/points/adjust", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request("POST", "/api/members/points/adjust", credential, json_body=arguments)
             return ToolResult(success=True, data=data)
         elif tool_name == "update_member_tags":
-            data = await self._http_request("PUT", "/api/members/tags", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request("PUT", "/api/members/tags", credential, json_body=arguments)
             return ToolResult(success=True, data=data)
         return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

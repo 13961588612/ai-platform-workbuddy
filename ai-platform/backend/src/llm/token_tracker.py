@@ -6,9 +6,9 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,7 +49,7 @@ class TokenTracker:
             provider: Provider 名称（deepseek、qwen）。
             usage: 包含 prompt/completion/total 计数的 TokenUsage。
         """
-        entry = TokenUsageModel(
+        entry: TokenUsageModel = TokenUsageModel(
             session_id=session_id or "unknown",
             user_id=user_id or "unknown",
             department=dept or "unknown",
@@ -97,26 +97,26 @@ class TokenTracker:
             Usage 记录列表，以字典形式返回。
         """
         async with db_session_context() as session:
-            stmt = select(TokenUsageModel).order_by(
+            stmt: Any = select(TokenUsageModel).order_by(
                 TokenUsageModel.timestamp.desc()
             )
 
             if user_id:
-                stmt = stmt.where(TokenUsageModel.user_id == user_id)
+                stmt: Any = stmt.where(TokenUsageModel.user_id == user_id)
             if dept:
-                stmt = stmt.where(TokenUsageModel.department == dept)
+                stmt: Any = stmt.where(TokenUsageModel.department == dept)
             if model:
-                stmt = stmt.where(TokenUsageModel.model == model)
+                stmt: Any = stmt.where(TokenUsageModel.model == model)
             if session_id:
-                stmt = stmt.where(TokenUsageModel.session_id == session_id)
+                stmt: Any = stmt.where(TokenUsageModel.session_id == session_id)
             if start_time:
-                stmt = stmt.where(TokenUsageModel.timestamp >= start_time)
+                stmt: Any = stmt.where(TokenUsageModel.timestamp >= start_time)
             if end_time:
-                stmt = stmt.where(TokenUsageModel.timestamp <= end_time)
+                stmt: Any = stmt.where(TokenUsageModel.timestamp <= end_time)
 
-            stmt = stmt.limit(limit).offset(offset)
-            result = await session.execute(stmt)
-            rows = result.scalars().all()
+            stmt: Any = stmt.limit(limit).offset(offset)
+            result: ToolResult = await session.execute(stmt)
+            rows: Any = result.scalars().all()
 
         return [
             {
@@ -148,19 +148,19 @@ class TokenTracker:
             包含 total_tokens、by_model、by_provider 分解的字典。
         """
         async with db_session_context() as session:
-            stmt = select(TokenUsageModel)
+            stmt: Any = select(TokenUsageModel)
 
             if user_id:
-                stmt = stmt.where(TokenUsageModel.user_id == user_id)
+                stmt: Any = stmt.where(TokenUsageModel.user_id == user_id)
             if dept:
-                stmt = stmt.where(TokenUsageModel.department == dept)
+                stmt: Any = stmt.where(TokenUsageModel.department == dept)
             if start_time:
-                stmt = stmt.where(TokenUsageModel.timestamp >= start_time)
+                stmt: Any = stmt.where(TokenUsageModel.timestamp >= start_time)
             if end_time:
-                stmt = stmt.where(TokenUsageModel.timestamp <= end_time)
+                stmt: Any = stmt.where(TokenUsageModel.timestamp <= end_time)
 
-            result = await session.execute(stmt)
-            rows = result.scalars().all()
+            result: ToolResult = await session.execute(stmt)
+            rows: Any = result.scalars().all()
 
         if not rows:
             return {
@@ -174,9 +174,9 @@ class TokenTracker:
 
         by_model: dict[str, int] = {}
         by_provider: dict[str, int] = {}
-        total_prompt = 0
-        total_completion = 0
-        total_tokens = 0
+        total_prompt: int = 0
+        total_completion: int = 0
+        total_tokens: int = 0
 
         for row in rows:
             by_model[row.model] = by_model.get(row.model, 0) + row.total_tokens

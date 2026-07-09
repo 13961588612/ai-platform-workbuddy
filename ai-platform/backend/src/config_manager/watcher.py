@@ -6,12 +6,12 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 from src.config import get_settings
 from src.utils.logging import get_logger
@@ -101,7 +101,7 @@ class ConfigWatcher:
 
     def _snapshot_files(self) -> None:
         """快照文件修改时间。"""
-        agents_dir = Path(self._base_path) / "agents"
+        agents_dir: Any = Path(self._base_path) / "agents"
         if not agents_dir.exists():
             return
 
@@ -109,7 +109,7 @@ class ConfigWatcher:
         for entry in agents_dir.iterdir():
             if not entry.is_dir():
                 continue
-            agent_yaml = entry / "agent.yaml"
+            agent_yaml: Any = entry / "agent.yaml"
             if agent_yaml.exists():
                 self._file_mtimes[entry.name] = agent_yaml.stat().st_mtime
 
@@ -123,10 +123,10 @@ class ConfigWatcher:
         self._db_versions.clear()
         try:
             async with db_session_context() as session:
-                stmt = select(AgentConfigModel.agent_id, AgentConfigModel.updated_at).where(
+                stmt: Any = select(AgentConfigModel.agent_id, AgentConfigModel.updated_at).where(
                     AgentConfigModel.is_deleted == False,  # noqa: E712
                 )
-                result = await session.execute(stmt)
+                result: ToolResult = await session.execute(stmt)
                 for row in result:
                     self._db_versions[row[0]] = row[1].isoformat() if row[1] else ""
         except Exception as exc:
@@ -141,7 +141,7 @@ class ConfigWatcher:
 
     def _check_file_changes(self) -> None:
         """检查文件系统变更。"""
-        agents_dir = Path(self._base_path) / "agents"
+        agents_dir: Any = Path(self._base_path) / "agents"
         if not agents_dir.exists():
             return
 
@@ -152,13 +152,13 @@ class ConfigWatcher:
             if not entry.is_dir():
                 continue
             current_dirs.add(entry.name)
-            agent_yaml = entry / "agent.yaml"
+            agent_yaml: Any = entry / "agent.yaml"
             if agent_yaml.exists():
                 current_mtimes[entry.name] = agent_yaml.stat().st_mtime
 
         # 检查新增或更新的配置
         for agent_id, mtime in current_mtimes.items():
-            old_mtime = self._file_mtimes.get(agent_id)
+            old_mtime: Skill | None = self._file_mtimes.get(agent_id)
             if old_mtime is None:
                 self._notify_change(agent_id, "created")
             elif mtime > old_mtime:
@@ -181,16 +181,16 @@ class ConfigWatcher:
         current_versions: dict[str, str] = {}
         try:
             async with db_session_context() as session:
-                stmt = select(
+                stmt: Any = select(
                     AgentConfigModel.agent_id,
                     AgentConfigModel.updated_at,
                     AgentConfigModel.is_deleted,
                 )
-                result = await session.execute(stmt)
+                result: ToolResult = await session.execute(stmt)
                 for row in result:
-                    agent_id = row[0]
-                    version = row[1].isoformat() if row[1] else ""
-                    is_deleted = row[2]
+                    agent_id: Any = row[0]
+                    version: str = row[1].isoformat() if row[1] else ""
+                    is_deleted: Any = row[2]
                     if is_deleted:
                         current_versions[agent_id] = "deleted"
                     else:
@@ -201,7 +201,7 @@ class ConfigWatcher:
 
         # 与之前的快照进行比较
         for agent_id, version in current_versions.items():
-            old_version = self._db_versions.get(agent_id)
+            old_version: Skill | None = self._db_versions.get(agent_id)
             if old_version is None:
                 if version != "deleted":
                     self._notify_change(agent_id, "created")
@@ -221,7 +221,7 @@ class ConfigWatcher:
         )
         for callback in self._callbacks:
             try:
-                result = callback(agent_id, change_type)
+                result: Any = callback(agent_id, change_type)
                 # 同时支持同步和异步回调
                 if asyncio.iscoroutine(result):
                     asyncio.create_task(result)

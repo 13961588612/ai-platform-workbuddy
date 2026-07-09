@@ -11,8 +11,8 @@ CredentialMapper — 将平台用户映射到业务系统账号。
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 import structlog
 from sqlalchemy import select
@@ -47,13 +47,13 @@ class CredentialMapper:
         则返回 ``None``。
         """
         # 获取账号名称
-        stmt = select(CredentialMappingModel).where(
+        stmt: Any = select(CredentialMappingModel).where(
             CredentialMappingModel.user_id == user_id,
             CredentialMappingModel.system_type == system_type,
             CredentialMappingModel.is_active.is_(True),
         )
-        result = await session.execute(stmt)
-        mapping = result.scalar_one_or_none()
+        result: ToolResult = await session.execute(stmt)
+        mapping: Any = result.scalar_one_or_none()
         if not mapping:
             logger.debug(
                 "No credential mapping found",
@@ -63,7 +63,7 @@ class CredentialMapper:
             return None
 
         # 解密凭据
-        credential = await self._vault.retrieve_credential(
+        credential: dict[str, Any] | None = await self._vault.retrieve_credential(
             session, user_id, system_type
         )
         if credential is None:
@@ -111,9 +111,9 @@ class CredentialMapper:
         user_id: str,
     ) -> list[str]:
         """返回用户拥有凭据的业务系统类型列表。"""
-        stmt = select(CredentialMappingModel.system_type).where(
+        stmt: Any = select(CredentialMappingModel.system_type).where(
             CredentialMappingModel.user_id == user_id,
             CredentialMappingModel.is_active.is_(True),
         )
-        result = await session.execute(stmt)
+        result: ToolResult = await session.execute(stmt)
         return [row[0] for row in result.all()]

@@ -6,8 +6,8 @@ HR 系统适配器 — 将人力资源系统的 API 封装为 MCP 工具。
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.adapters.base import BusinessSystemAdapter, ToolDefinition, ToolResult
 
@@ -158,7 +158,7 @@ class HRAdapter(BusinessSystemAdapter):
         Returns:
             包含 HR API 响应数据或错误信息的 ``ToolResult``。
         """
-        get_tools = {
+        get_tools: dict[str, Any] = {
             "query_leave_balance": "/api/leave/balance",
             "query_salary_slip": "/api/salary/slip",
             "query_org_structure": "/api/org/structure",
@@ -167,9 +167,9 @@ class HRAdapter(BusinessSystemAdapter):
             "query_training_records": "/api/training/records",
         }
         if tool_name in get_tools:
-            data = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
+            data: dict[str, Any] = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
             return ToolResult(success=True, data=data)
         elif tool_name == "apply_leave":
-            data = await self._http_request("POST", "/api/leave/apply", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request("POST", "/api/leave/apply", credential, json_body=arguments)
             return ToolResult(success=True, data=data)
         return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

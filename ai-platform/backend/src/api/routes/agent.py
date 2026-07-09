@@ -15,8 +15,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -132,7 +132,7 @@ async def create_agent(
             RuntimeConfig,
         )
 
-        config = AgentConfig(
+        config: AgentConfig = AgentConfig(
             agent_id=req.agent_id,
             name=req.agent_id,
             display_name=req.display_name,
@@ -152,7 +152,7 @@ async def create_agent(
         await config_manager.save_config(config)
 
         # 创建 agent 实例
-        instance = await agent_manager.create_agent(config)
+        instance: dict[str, Any] = await agent_manager.create_agent(config)
 
         return success(
             data={"agent_id": req.agent_id, "state": instance.lifecycle.current_state.value},
@@ -173,8 +173,8 @@ async def list_agents(
     user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
     """列出所有 Agent 实例。"""
-    instances = agent_manager.list_agents()
-    summaries = [
+    instances: dict[str, Any] = agent_manager.list_agents()
+    summaries: list[dict[str, Any]] = [
         AgentSummary(
             agent_id=inst.id,
             display_name=inst.config.display_name,
@@ -196,9 +196,9 @@ async def get_agent(
 ) -> dict[str, Any]:
     """获取指定 Agent 的详细信息。"""
     try:
-        instance = agent_manager.get_agent(agent_id)
-        config = instance.config
-        detail = AgentDetail(
+        instance: dict[str, Any] = agent_manager.get_agent(agent_id)
+        config: Any = instance.config
+        detail: AgentDetail = AgentDetail(
             agent_id=config.agent_id,
             display_name=config.display_name,
             description=config.description,
@@ -229,8 +229,8 @@ async def update_agent(
 ) -> dict[str, Any]:
     """更新 Agent 配置（热重载）。"""
     try:
-        instance = agent_manager.get_agent(agent_id)
-        config = instance.config
+        instance: dict[str, Any] = agent_manager.get_agent(agent_id)
+        config: Any = instance.config
 
         # 应用更新
         if req.display_name is not None:
@@ -283,7 +283,7 @@ async def start_agent(
 ) -> dict[str, Any]:
     """启动 Agent 实例。"""
     try:
-        state = await agent_manager.start_agent(agent_id)
+        state: dict[str, Any] = await agent_manager.start_agent(agent_id)
         return success(
             data={"agent_id": agent_id, "state": state.value},
             message="Agent started",
@@ -302,7 +302,7 @@ async def pause_agent(
 ) -> dict[str, Any]:
     """暂停正在运行的 Agent 实例。"""
     try:
-        state = await agent_manager.pause_agent(agent_id)
+        state: dict[str, Any] = await agent_manager.pause_agent(agent_id)
         return success(
             data={"agent_id": agent_id, "state": state.value},
             message="Agent paused",
@@ -321,7 +321,7 @@ async def resume_agent(
 ) -> dict[str, Any]:
     """恢复已暂停的 Agent 实例。"""
     try:
-        state = await agent_manager.resume_agent(agent_id)
+        state: dict[str, Any] = await agent_manager.resume_agent(agent_id)
         return success(
             data={"agent_id": agent_id, "state": state.value},
             message="Agent resumed",
@@ -340,7 +340,7 @@ async def stop_agent(
 ) -> dict[str, Any]:
     """停止 Agent 实例。"""
     try:
-        state = await agent_manager.stop_agent(agent_id)
+        state: dict[str, Any] = await agent_manager.stop_agent(agent_id)
         return success(
             data={"agent_id": agent_id, "state": state.value},
             message="Agent stopped",
@@ -357,7 +357,7 @@ async def get_agent_health(
 ) -> dict[str, Any]:
     """检查指定 Agent 的健康状态。"""
     try:
-        health = await agent_manager.get_agent_health(agent_id)
+        health: dict[str, Any] = await agent_manager.get_agent_health(agent_id)
         return success(data=health.model_dump())
     except AgentNotFoundError as exc:
         return error_response(exc.code, exc.message, status.HTTP_404_NOT_FOUND)

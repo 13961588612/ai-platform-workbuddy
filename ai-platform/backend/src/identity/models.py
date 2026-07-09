@@ -6,9 +6,9 @@ PermissionEngine 的运行时内存表示）、Role、Department 以及各种请
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, Field
 

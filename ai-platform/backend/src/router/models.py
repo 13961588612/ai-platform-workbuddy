@@ -1,9 +1,9 @@
 """路由数据模型 — RouteResult、RouteLog、UserRequest、SessionContext。"""
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime, timezone
-from typing import Any
 
 from pydantic import BaseModel, Field
 

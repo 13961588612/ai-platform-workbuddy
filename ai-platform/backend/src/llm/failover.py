@@ -6,11 +6,11 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any
 
 from src.config import get_settings
 from src.llm.models import FailoverConfig
@@ -94,7 +94,7 @@ class FailoverManager:
             self._failure_counts[provider] = self._failure_counts.get(provider, 0) + 1
             self._last_failure_at[provider] = datetime.now(timezone.utc)
 
-            failures = self._failure_counts[provider]
+            failures: Any = self._failure_counts[provider]
             logger.warning(
                 "Provider failure recorded",
                 provider=provider,
@@ -131,16 +131,16 @@ class FailoverManager:
 
     def _maybe_try_recovery(self) -> None:
         """检查是否已过足够时间以尝试恢复到主 provider。"""
-        now = time.monotonic()
+        now: Any = time.monotonic()
         if now - self._last_recovery_check < self._config.recovery_check_interval:
             return
 
         self._last_recovery_check = now
 
         # 如果主 provider 上次故障时间已过很久，尝试切回
-        last_failure = self._last_failure_at.get(self._config.primary)
+        last_failure: Skill | None = self._last_failure_at.get(self._config.primary)
         if last_failure is not None:
-            elapsed = (datetime.now(timezone.utc) - last_failure).total_seconds()
+            elapsed: Any = (datetime.now(timezone.utc) - last_failure).total_seconds()
             if elapsed >= self._config.recovery_check_interval:
                 self._active_provider = self._config.primary
                 self._failure_counts[self._config.primary] = 0

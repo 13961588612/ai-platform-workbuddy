@@ -18,10 +18,10 @@ MemoryManager — Agent 记忆的中央编排器。
 """
 
 from __future__ import annotations
+from typing import Any
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 import httpx
 import structlog
@@ -146,8 +146,8 @@ class MemoryManager:
         if self._collection_ready:
             return
         try:
-            collections = await self._qdrant.get_collections()
-            names = [c.name for c in collections.collections]
+            collections: Any = await self._qdrant.get_collections()
+            names: list[Any] = [c.name for c in collections.collections]
             if self._collection_name not in names:
                 await self._qdrant.create_collection(
                     collection_name=self._collection_name,
@@ -194,11 +194,11 @@ class MemoryManager:
         使用与 Skills 索引器相同的 bge-small-zh-v1.5 模型（768 维），
         确保所有向量集合之间的一致性。
         """
-        url = f"{self._embedding_url}/embed"
+        url: str = f"{self._embedding_url}/embed"
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(url, json={"text": text})
+            resp: Any = await client.post(url, json={"text": text})
             resp.raise_for_status()
-            data = resp.json()
+            data: Any = resp.json()
             return data.get("embedding", data.get("vector", []))
 
     # ==================================================================
@@ -244,7 +244,7 @@ class MemoryManager:
 
         # 生成查询嵌入
         try:
-            query_vector = await self._generate_embedding(query)
+            query_vector: list[float] = await self._generate_embedding(query)
         except Exception:
             logger.exception(
                 "Failed to generate query embedding for memory retrieval",
@@ -254,7 +254,7 @@ class MemoryManager:
             return []
 
         # 批次 1：用户级记忆（session_id IS NULL，跨渠道）
-        user_level_results = await self._qdrant_search(
+        user_level_results: list[dict[str, Any]] = await self._qdrant_search(
             query_vector=query_vector,
             agent_name=agent_name,
             user_id=user_id,
@@ -266,7 +266,7 @@ class MemoryManager:
         # 批次 2：会话级记忆（严格隔离）
         session_level_results: list[dict[str, Any]] = []
         if session_id:
-            session_level_results = await self._qdrant_search(
+            session_level_results: list[dict[str, Any]] = await self._qdrant_search(
                 query_vector=query_vector,
                 agent_name=agent_name,
                 user_id=user_id,
@@ -277,17 +277,17 @@ class MemoryManager:
 
         # 合并并计算综合分数
         merged: list[MemorySearchResult] = []
-        now = datetime.now(timezone.utc)
+        now: Any = datetime.now(timezone.utc)
 
         for hit in user_level_results + session_level_results:
-            payload = hit.get("payload", {})
-            similarity = hit.get("score", 0.0) or 0.0
-            importance = float(payload.get("importance", 0.5))
-            created_at_str = payload.get("created_at", "")
-            recency_factor = self._compute_recency_factor(created_at_str, now)
-            composite = importance * similarity * recency_factor
+            payload: Skill | None = hit.get("payload", {})
+            similarity: Any = hit.get("score", 0.0) or 0.0
+            importance: float = float(payload.get("importance", 0.5))
+            created_at_str: Skill | None = payload.get("created_at", "")
+            recency_factor: float = self._compute_recency_factor(created_at_str, now)
+            composite: Any = importance * similarity * recency_factor
 
-            entry = self._payload_to_entry(payload, hit.get("id", ""))
+            entry: MemoryEntry = self._payload_to_entry(payload, hit.get("id", ""))
             merged.append(
                 MemorySearchResult(
                     entry=entry,
@@ -298,7 +298,7 @@ class MemoryManager:
 
         # 按综合分数降序排列，取 top_k
         merged.sort(key=lambda r: r.composite_score, reverse=True)
-        result = merged[:top_k]
+        result: Any = merged[:top_k]
 
         logger.debug(
             "Dynamic memory retrieved",
@@ -349,7 +349,7 @@ class MemoryManager:
             )
 
         try:
-            results = await self._qdrant.search(
+            results: list[dict] = await self._qdrant.search(
                 collection_name=self._collection_name,
                 query_vector=query_vector,
                 limit=limit,
@@ -414,22 +414,22 @@ class MemoryManager:
         await self.ensure_collection()
 
         # 钳制 importance
-        importance = max(0.0, min(1.0, importance))
+        importance: Any = max(0.0, min(1.0, importance))
 
         # 确定 TTL
-        effective_ttl = ttl_days if ttl_days is not None else self._settings.AGENT_MEMORY_TTL_DAYS
+        effective_ttl: Any = ttl_days if ttl_days is not None else self._settings.AGENT_MEMORY_TTL_DAYS
         expires_at: datetime | None = None
         if effective_ttl > 0:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=effective_ttl)
+            expires_at: Any = datetime.now(timezone.utc) + timedelta(days=effective_ttl)
 
-        meta = metadata or {}
+        meta: Any = metadata or {}
 
         # 1. 插入 PostgreSQL
-        memory_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc)
+        memory_id: str = str(uuid.uuid4())
+        now: Any = datetime.now(timezone.utc)
 
         async with db_session_context() as session:
-            record = AgentMemory(
+            record: AgentMemory = AgentMemory(
                 id=memory_id,
                 agent_name=agent_name,
                 session_id=session_id,
@@ -444,7 +444,7 @@ class MemoryManager:
 
         # 2. 生成嵌入并 upsert 到 Qdrant
         try:
-            vector = await self._generate_embedding(content)
+            vector: list[float] = await self._generate_embedding(content)
         except Exception:
             logger.exception(
                 "Failed to generate embedding for memory write-back",
@@ -467,8 +467,8 @@ class MemoryManager:
                 updated_at=now,
             )
 
-        scope = "user" if session_id is None else "session"
-        point = qdrant_models.PointStruct(
+        scope: str = "user" if session_id is None else "session"
+        point: PointStruct = qdrant_models.PointStruct(
             id=memory_id,
             vector=vector,
             payload={
@@ -537,11 +537,11 @@ class MemoryManager:
 
         返回实际写入的记忆数量。
         """
-        written = 0
+        written: int = 0
         for item in extracted:
             if item.importance <= _MIN_WRITE_IMPORTANCE:
                 continue
-            result = await self.write_dynamic_memory(
+            result: MemoryEntry | None = await self.write_dynamic_memory(
                 agent_name=agent_name,
                 user_id=user_id,
                 session_id=session_id,
@@ -594,12 +594,12 @@ class MemoryManager:
 
         返回包含每个操作计数的摘要字典。
         """
-        expired_count = await self._forget_expired()
-        evicted_count = await self._enforce_capacity_all()
-        promoted_count = await self._promote_session_memories()
-        decayed_count = await self._apply_importance_decay()
+        expired_count: int = await self._forget_expired()
+        evicted_count: int = await self._enforce_capacity_all()
+        promoted_count: int = await self._promote_session_memories()
+        decayed_count: int = await self._apply_importance_decay()
 
-        summary = {
+        summary: dict[str, Any] = {
             "expired_deleted": expired_count,
             "capacity_evicted": evicted_count,
             "session_promoted": promoted_count,
@@ -610,16 +610,16 @@ class MemoryManager:
 
     async def _forget_expired(self) -> int:
         """从 PG 和 Qdrant 中删除 ``expires_at < NOW()`` 的记忆。"""
-        now = datetime.now(timezone.utc)
+        now: Any = datetime.now(timezone.utc)
         expired_ids: list[str] = []
 
         async with db_session_context() as session:
-            stmt = select(AgentMemory.id).where(
+            stmt: Any = select(AgentMemory.id).where(
                 AgentMemory.expires_at.is_not(None),
                 AgentMemory.expires_at < now,
             )
-            result = await session.execute(stmt)
-            expired_ids = [row[0] for row in result.all()]
+            result: ToolResult = await session.execute(stmt)
+            expired_ids: list[Any] = [row[0] for row in result.all()]
 
         if not expired_ids:
             return 0
@@ -651,23 +651,23 @@ class MemoryManager:
 
         返回被驱逐的记忆数量。
         """
-        max_per_user = self._settings.AGENT_MEMORY_MAX_PER_USER
+        max_per_user: Any = self._settings.AGENT_MEMORY_MAX_PER_USER
 
         async with db_session_context() as session:
-            count_stmt = select(func.count(AgentMemory.id)).where(
+            count_stmt: Any = select(func.count(AgentMemory.id)).where(
                 AgentMemory.agent_name == agent_name,
                 AgentMemory.user_id == user_id,
             )
-            result = await session.execute(count_stmt)
-            total = result.scalar() or 0
+            result: ToolResult = await session.execute(count_stmt)
+            total: Any = result.scalar() or 0
 
             if total <= max_per_user:
                 return 0
 
             # 计算驱逐分数并选择受害者
-            excess = total - max_per_user
-            now = datetime.now(timezone.utc)
-            victim_stmt = (
+            excess: Any = total - max_per_user
+            now: Any = datetime.now(timezone.utc)
+            victim_stmt: Any = (
                 select(
                     AgentMemory.id,
                     AgentMemory.importance,
@@ -680,8 +680,8 @@ class MemoryManager:
                 .order_by(AgentMemory.importance.asc(), AgentMemory.created_at.asc())
                 .limit(excess)
             )
-            victim_result = await session.execute(victim_stmt)
-            victim_ids = [row[0] for row in victim_result.all()]
+            victim_result: ToolResult = await session.execute(victim_stmt)
+            victim_ids: list[Any] = [row[0] for row in victim_result.all()]
 
         if not victim_ids:
             return 0
@@ -711,9 +711,9 @@ class MemoryManager:
 
     async def _enforce_capacity_all(self) -> int:
         """对所有 agent + user 组合强制执行容量限制。"""
-        total_evicted = 0
+        total_evicted: int = 0
         async with db_session_context() as session:
-            stmt = (
+            stmt: Any = (
                 select(
                     AgentMemory.agent_name,
                     AgentMemory.user_id,
@@ -721,8 +721,8 @@ class MemoryManager:
                 .where(AgentMemory.user_id.is_not(None))
                 .group_by(AgentMemory.agent_name, AgentMemory.user_id)
             )
-            result = await session.execute(stmt)
-            pairs = result.all()
+            result: ToolResult = await session.execute(stmt)
+            pairs: Any = result.all()
 
         for agent_name, user_id in pairs:
             if user_id is None:
@@ -739,12 +739,12 @@ class MemoryManager:
         """
         async with db_session_context() as session:
             # 查找可升级的记忆
-            stmt = select(AgentMemory).where(
+            stmt: Any = select(AgentMemory).where(
                 AgentMemory.session_id.is_not(None),
                 AgentMemory.importance >= _PROMOTION_THRESHOLD,
             )
-            result = await session.execute(stmt)
-            records = result.scalars().all()
+            result: ToolResult = await session.execute(stmt)
+            records: Any = result.scalars().all()
 
             if not records:
                 return 0
@@ -778,24 +778,24 @@ class MemoryManager:
         每个月，importance 乘以 0.95。我们在 metadata 中跟踪上次
         衰减日期，以避免在同一月内重复衰减。
         """
-        now = datetime.now(timezone.utc)
-        cutoff = now - timedelta(days=_DAYS_PER_MONTH)
-        decay_key = "last_decay_at"
-        decayed_count = 0
+        now: Any = datetime.now(timezone.utc)
+        cutoff: Any = now - timedelta(days=_DAYS_PER_MONTH)
+        decay_key: str = "last_decay_at"
+        decayed_count: int = 0
 
         async with db_session_context() as session:
-            stmt = select(AgentMemory).where(
+            stmt: Any = select(AgentMemory).where(
                 AgentMemory.created_at < cutoff,
             )
-            result = await session.execute(stmt)
-            records = result.scalars().all()
+            result: ToolResult = await session.execute(stmt)
+            records: Any = result.scalars().all()
 
             for record in records:
-                meta = record.metadata_ or {}
-                last_decay_str = meta.get(decay_key)
+                meta: Any = record.metadata_ or {}
+                last_decay_str: Skill | None = meta.get(decay_key)
                 if last_decay_str:
                     try:
-                        last_decay = datetime.fromisoformat(last_decay_str)
+                        last_decay: Any = datetime.fromisoformat(last_decay_str)
                         if last_decay > cutoff:
                             # 本月已衰减
                             continue
@@ -820,16 +820,16 @@ class MemoryManager:
 
         返回立即删除的记忆数量。
         """
-        now = datetime.now(timezone.utc)
-        summary_ttl = now + timedelta(days=_SESSION_SUMMARY_TTL_DAYS)
+        now: Any = datetime.now(timezone.utc)
+        summary_ttl: Any = now + timedelta(days=_SESSION_SUMMARY_TTL_DAYS)
         deleted_ids: list[str] = []
 
         async with db_session_context() as session:
-            stmt = select(AgentMemory).where(
+            stmt: Any = select(AgentMemory).where(
                 AgentMemory.session_id == session_id,
             )
-            result = await session.execute(stmt)
-            records = result.scalars().all()
+            result: ToolResult = await session.execute(stmt)
+            records: Any = result.scalars().all()
 
             for record in records:
                 if record.memory_type == MemoryType.SUMMARY.value:
@@ -878,43 +878,43 @@ class MemoryManager:
         if not created_at_str:
             return 1.0
         try:
-            created = datetime.fromisoformat(created_at_str)
+            created: Any = datetime.fromisoformat(created_at_str)
             if created.tzinfo is None:
-                created = created.replace(tzinfo=timezone.utc)
+                created: str = created.replace(tzinfo=timezone.utc)
         except (ValueError, TypeError):
             return 1.0
 
-        age_days = (now - created).total_seconds() / 86400.0
+        age_days: Any = (now - created).total_seconds() / 86400.0
         if age_days <= 0:
             return 1.0
-        age_months = age_days / _DAYS_PER_MONTH
-        factor = _RECENCY_DECAY_PER_MONTH ** age_months
+        age_months: Any = age_days / _DAYS_PER_MONTH
+        factor: Any = _RECENCY_DECAY_PER_MONTH ** age_months
         return max(_RECENCY_MIN_FACTOR, factor)
 
     @staticmethod
     def _payload_to_entry(payload: dict[str, Any], point_id: str) -> MemoryEntry:
         """将 Qdrant payload 字典转换为 :class:`MemoryEntry`。"""
-        memory_id = payload.get("memory_id", point_id)
-        memory_type_str = payload.get("memory_type", "context")
+        memory_id: Skill | None = payload.get("memory_id", point_id)
+        memory_type_str: Skill | None = payload.get("memory_type", "context")
         try:
-            memory_type = MemoryType(memory_type_str)
+            memory_type: MemoryType = MemoryType(memory_type_str)
         except ValueError:
-            memory_type = MemoryType.CONTEXT
+            memory_type: Any = MemoryType.CONTEXT
 
-        session_id = payload.get("session_id")
-        expires_at_str = payload.get("expires_at")
+        session_id: Skill | None = payload.get("session_id")
+        expires_at_str: Skill | None = payload.get("expires_at")
         expires_at: datetime | None = None
         if expires_at_str:
             try:
-                expires_at = datetime.fromisoformat(expires_at_str)
+                expires_at: Any = datetime.fromisoformat(expires_at_str)
             except (ValueError, TypeError):
-                expires_at = None
+                expires_at: None = None
 
-        created_at_str = payload.get("created_at", "")
-        created_at = datetime.now(timezone.utc)
+        created_at_str: Skill | None = payload.get("created_at", "")
+        created_at: Any = datetime.now(timezone.utc)
         if created_at_str:
             try:
-                created_at = datetime.fromisoformat(created_at_str)
+                created_at: Any = datetime.fromisoformat(created_at_str)
             except (ValueError, TypeError):
                 pass
 

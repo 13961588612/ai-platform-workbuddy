@@ -15,7 +15,7 @@ SkillRetriever — 两阶段检索引擎的第一阶段。
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import structlog
 
@@ -76,30 +76,30 @@ class SkillRetriever:
             其中 ``semantic_similarity`` 已填充，但其他
             子分数为零（由 SkillRanker 填充）。
         """
-        n = top_n or self._default_top_n
+        n: Any = top_n or self._default_top_n
 
         # 1. 缓存查找
         if self._cache and not skip_cache:
-            cached = await self._cache.get_query_result(query, categories)
+            cached: list[SkillScore] | None = await self._cache.get_query_result(query, categories)
             if cached is not None:
                 logger.debug("SkillRetriever cache hit", query=query[:80])
                 return cached[:n]
 
         # 2. 生成查询 embedding
         try:
-            query_vector = await self._indexer.generate_embedding(query)
+            query_vector: list[float] = await self._indexer.generate_embedding(query)
         except Exception:
             logger.exception("Failed to generate query embedding", query=query[:80])
             return []
 
         # 3. 确定分类过滤器
-        category_filter = categories
+        category_filter: Any = categories
         if self._grouper and category_filter is None:
-            category_filter = self._grouper.get_candidate_categories(None)
+            category_filter: list[str] | None = self._grouper.get_candidate_categories(None)
 
         # 4. Qdrant 搜索
         try:
-            hits = await self._indexer.search(
+            hits: list[dict] = await self._indexer.search(
                 query_vector=query_vector,
                 top_n=n,
                 category_filter=category_filter,
@@ -111,15 +111,15 @@ class SkillRetriever:
         # 5. 转换为 SkillScore
         results: list[SkillScore] = []
         for hit in hits:
-            skill_id = hit["skill_id"]
-            score = hit["score"]
-            skill = None
+            skill_id: Any = hit["skill_id"]
+            score: Any = hit["score"]
+            skill: None = None
             if self._registry:
-                skill = self._registry.get(skill_id)
+                skill: Skill | None = self._registry.get(skill_id)
             if skill is None:
                 # 回退：从 payload 构建最小化 Skill
-                payload = hit.get("payload", {})
-                skill = Skill(
+                payload: Skill | None = hit.get("payload", {})
+                skill: Skill = Skill(
                     skill_id=skill_id,
                     name=payload.get("name", skill_id),
                     description="",

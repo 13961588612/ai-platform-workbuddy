@@ -6,11 +6,11 @@ MCP 工具注册。LLM 调用通过 ``GatewayApiClient`` 路由到平台的 ``LL
 """
 
 from __future__ import annotations
+from typing import Any
 
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
 
 from src.agent.config import AgentConfig
 from src.config import get_settings
@@ -64,7 +64,7 @@ def _clip_log_text(text: str, limit: int = _TRACE_LOG_LIMIT) -> str:
     Returns:
         去首尾空白并截断后的字符串。
     """
-    cleaned = (text or "").strip()
+    cleaned: str = (text or "").strip()
     if len(cleaned) <= limit:
         return cleaned
     return cleaned[:limit] + "…"
@@ -92,7 +92,7 @@ def _log_agent_trace(session_id: str, step: int, phase: str, **fields: Any) -> N
             payload[key] = _clip_log_text(value)
         elif isinstance(value, (dict, list)):
             try:
-                serialized = json.dumps(value, ensure_ascii=False, default=str)
+                serialized: str = json.dumps(value, ensure_ascii=False, default=str)
                 payload[key] = _clip_log_text(serialized, limit=1500)
             except (TypeError, ValueError):
                 payload[key] = str(value)
@@ -107,8 +107,8 @@ def _platform_messages_to_conversation(messages: list[dict[str, Any]]) -> list[A
         return []
     result: list[ConversationMessage] = []
     for msg in messages:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
+        role: Skill | None = msg.get("role", "user")
+        content: Skill | None = msg.get("content", "")
         if role == "assistant":
             result.append(
                 ConversationMessage(role="assistant", content=[TextBlock(text=str(content or ""))])
@@ -170,7 +170,7 @@ class OpenHarnessRuntime(AgentRuntime):
         self._config = config
 
         if hasattr(config, "runtime") and config.runtime:
-            params = getattr(config.runtime, "params", {}) or {}
+            params: Any = getattr(config.runtime, "params", {}) or {}
             self._max_steps = params.get("maxSteps", 20)
             self._temperature = params.get("temperature", 0.7)
             self._max_tokens = params.get("maxTokens", 4096)
@@ -178,7 +178,7 @@ class OpenHarnessRuntime(AgentRuntime):
         if hasattr(config, "system_prompt") and config.system_prompt:
             self._system_prompt = config.system_prompt
         elif hasattr(config, "runtime") and config.runtime:
-            prompts = getattr(config.runtime, "prompts", {}) or {}
+            prompts: Any = getattr(config.runtime, "prompts", {}) or {}
             self._system_prompt = prompts.get("system_prompt", "")
 
         if hasattr(config, "model") and config.model:
@@ -227,13 +227,13 @@ class OpenHarnessRuntime(AgentRuntime):
         agent_config: AgentConfig = (
             config if isinstance(config, AgentConfig) else self._config  # type: ignore[assignment]
         )
-        oh_messages = _platform_messages_to_conversation(messages)
-        last_user_msg = next(
+        oh_messages: list[Any] = _platform_messages_to_conversation(messages)
+        last_user_msg: Any = next(
             (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
             "",
         )
 
-        skill_dirs = resolve_extra_skill_dirs(agent_config, Path(get_settings().CONFIG_BASE_PATH))
+        skill_dirs: list[str] = resolve_extra_skill_dirs(agent_config, Path(get_settings().CONFIG_BASE_PATH))
         _log_agent_trace(
             session_id,
             step=0,
@@ -244,14 +244,14 @@ class OpenHarnessRuntime(AgentRuntime):
             runtime="native_openharness",
         )
 
-        total_usage = TokenUsage()
-        step = 0
+        total_usage: TokenUsage = TokenUsage()
+        step: int = 0
 
         try:
             if self._native_mcp_manager is None:
                 self._native_mcp_manager = await connect_mcp_manager(agent_config)
 
-            engine = await build_native_query_engine(
+            engine: QueryEngine = await build_native_query_engine(
                 agent_config,
                 self._llm_gateway,
                 self._native_mcp_manager,
@@ -260,11 +260,11 @@ class OpenHarnessRuntime(AgentRuntime):
 
             if len(oh_messages) > 1:
                 engine.load_messages(oh_messages[:-1])
-                prompt = oh_messages[-1]
+                prompt: Any = oh_messages[-1]
             elif oh_messages:
-                prompt = oh_messages[-1]
+                prompt: Any = oh_messages[-1]
             else:
-                prompt = ConversationMessage.from_user_text("")
+                prompt: Any = ConversationMessage.from_user_text("")
 
             async for event in engine.submit_message(prompt):
                 step += 1
@@ -296,8 +296,8 @@ class OpenHarnessRuntime(AgentRuntime):
                         error=result.get("error"),
                     )
                 elif isinstance(event, AssistantTurnComplete):
-                    usage = event.usage
-                    total_usage = TokenUsage(
+                    usage: Any = event.usage
+                    total_usage: TokenUsage = TokenUsage(
                         prompt=usage.input_tokens,
                         completion=usage.output_tokens,
                         total=usage.input_tokens + usage.output_tokens,

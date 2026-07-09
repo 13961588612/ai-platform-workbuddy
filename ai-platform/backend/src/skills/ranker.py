@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import structlog
 
@@ -70,14 +70,14 @@ class SkillRanker:
             按综合分数降序排列的 :class:`Skill` 对象列表。
         """
         # 1. 权限过滤
-        filtered = await self.filter_by_permission(candidates, user)
+        filtered: list[SkillScore] = await self.filter_by_permission(candidates, user)
 
         # 2. 重排序
-        reranked = self.rerank(filtered, user, query)
+        reranked: list[SkillScore] = self.rerank(filtered, user, query)
 
         # 3. 动态 K
-        k = top_k or self._compute_dynamic_k(query)
-        top = reranked[:k]
+        k: Any = top_k or self._compute_dynamic_k(query)
+        top: Any = reranked[:k]
 
         logger.debug(
             "SkillRanker ranked",
@@ -125,23 +125,23 @@ class SkillRanker:
             return []
 
         # 找到最大 call_count 用于归一化
-        max_calls = max(
+        max_calls: Any = max(
             (c.skill.call_count for c in candidates), default=1
         ) or 1
 
-        now = datetime.now(timezone.utc)
-        user_categories = set(getattr(user, "allowed_categories", []) or [])
+        now: Any = datetime.now(timezone.utc)
+        user_categories: set[Any] = set(getattr(user, "allowed_categories", []) or [])
 
         for candidate in candidates:
-            skill = candidate.skill
+            skill: Any = candidate.skill
 
             # 使用频率（归一化 0-1）
             candidate.usage_frequency = skill.call_count / max_calls
 
             # 近期奖励（30 天指数衰减）
             if skill.last_called_at:
-                delta = now - skill.last_called_at
-                days = delta.total_seconds() / 86400.0
+                delta: Any = now - skill.last_called_at
+                days: Any = delta.total_seconds() / 86400.0
                 candidate.recency_bonus = math.exp(-days / 30.0)
             else:
                 candidate.recency_bonus = 0.0
@@ -155,7 +155,7 @@ class SkillRanker:
                 candidate.category_match = 0.0
 
             # 应用优先级权重
-            priority_weight = skill.priority if skill.priority else 1.0
+            priority_weight: Any = skill.priority if skill.priority else 1.0
             candidate.compute_composite()
             candidate.score *= priority_weight
 
@@ -168,15 +168,15 @@ class SkillRanker:
     @staticmethod
     def _compute_dynamic_k(query: str) -> int:
         """基于查询复杂度确定 K 值（轻量级规则引擎）。"""
-        query_len = len(query)
+        query_len: Any = len(query)
 
         # 多步骤指示符
-        multi_step_markers = ["并且", "然后", "接着", "之后", "以及", "同时"]
-        has_multi_step = any(marker in query for marker in multi_step_markers)
+        multi_step_markers: list[str] = ["并且", "然后", "接着", "之后", "以及", "同时"]
+        has_multi_step: Any = any(marker in query for marker in multi_step_markers)
 
         # 多条件指示符
-        multi_condition_markers = ["和", "与", "及", "，", "、"]
-        condition_count = sum(1 for m in multi_condition_markers if m in query)
+        multi_condition_markers: list[str] = ["和", "与", "及", "，", "、"]
+        condition_count: Any = sum(1 for m in multi_condition_markers if m in query)
 
         if query_len > 80 or has_multi_step:
             return 20

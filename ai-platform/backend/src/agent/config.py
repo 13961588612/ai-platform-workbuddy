@@ -5,9 +5,9 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime, timezone
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -154,11 +154,11 @@ class AgentConfig(BaseModel):
 
         处理配置文件中的嵌套 YAML 结构。
         """
-        agent_section = data.get("agent", data)
+        agent_section: Skill | None = data.get("agent", data)
 
         # Parse runtime section
-        runtime_data = agent_section.get("runtime", data.get("runtime", {}))
-        runtime = RuntimeConfig(
+        runtime_data: Skill | None = agent_section.get("runtime", data.get("runtime", {}))
+        runtime: RuntimeConfig = RuntimeConfig(
             type=runtime_data.get("type", "openharness"),
             version=runtime_data.get("version", "1.0.0"),
             params=runtime_data.get("params", {}),
@@ -168,8 +168,8 @@ class AgentConfig(BaseModel):
         )
 
         # Parse model section
-        model_data = agent_section.get("model", data.get("model", {}))
-        model = ModelConfig(
+        model_data: Skill | None = agent_section.get("model", data.get("model", {}))
+        model: ModelConfig = ModelConfig(
             primary=model_data.get("primary", "deepseek-v4-flash"),
             fallback=model_data.get("fallback", "qwen3.6-plus"),
             strategy=model_data.get("strategy", "default-primary"),
@@ -177,18 +177,18 @@ class AgentConfig(BaseModel):
         )
 
         # Parse routing section
-        routing_data = agent_section.get("routing", data.get("routing", {}))
-        routing = RoutingConfig(
+        routing_data: Skill | None = agent_section.get("routing", data.get("routing", {}))
+        routing: RoutingConfig = RoutingConfig(
             keywords=routing_data.get("keywords", []),
             enabled=routing_data.get("enabled", True),
             priority=routing_data.get("priority", 10),
         )
 
         # Parse memory section
-        memory_data = agent_section.get("memory", data.get("memory", {}))
-        static_data = memory_data.get("static", {})
-        dynamic_data = memory_data.get("dynamic", {})
-        memory = MemoryConfig(
+        memory_data: Skill | None = agent_section.get("memory", data.get("memory", {}))
+        static_data: Skill | None = memory_data.get("static", {})
+        dynamic_data: Skill | None = memory_data.get("dynamic", {})
+        memory: MemoryConfig = MemoryConfig(
             static_enabled=static_data.get("enabled", True),
             personality_file=static_data.get("personality", "memory/personality.md"),
             facts_dir=static_data.get("facts_dir", "memory/facts/"),
@@ -201,12 +201,12 @@ class AgentConfig(BaseModel):
         )
 
         # Parse includes
-        includes = agent_section.get("includes", {})
+        includes: Skill | None = agent_section.get("includes", {})
 
         # Parse enabled skills (from skills/enabled-skills.yaml merged by ConfigLoader)
         skills: list[SkillRef] = []
-        skills_data = data.get("skills", agent_section.get("skills", {}))
-        enabled_list = skills_data.get("enabled", []) if isinstance(skills_data, dict) else []
+        skills_data: Skill | None = data.get("skills", agent_section.get("skills", {}))
+        enabled_list: Skill | None | list[Any] = skills_data.get("enabled", []) if isinstance(skills_data, dict) else []
         for item in enabled_list:
             if not isinstance(item, dict) or not item.get("skill_id"):
                 continue
@@ -223,9 +223,9 @@ class AgentConfig(BaseModel):
         for entry in data.get("mcp_servers", agent_section.get("mcp_servers", [])):
             if not isinstance(entry, dict) or not entry.get("name"):
                 continue
-            transport = str(entry.get("transport", "stdio")).lower()
+            transport: str = str(entry.get("transport", "stdio")).lower()
             if transport in ("streamable_http", "streamable-http"):
-                transport = "http"
+                transport: str = "http"
             mcp_servers.append(
                 MCPServerConfig(
                     name=entry["name"],
@@ -238,7 +238,7 @@ class AgentConfig(BaseModel):
                 )
             )
 
-        system_prompt = data.get("system_prompt", agent_section.get("system_prompt", ""))
+        system_prompt: Skill | None = data.get("system_prompt", agent_section.get("system_prompt", ""))
 
         return cls(
             agent_id=agent_section.get("name", ""),

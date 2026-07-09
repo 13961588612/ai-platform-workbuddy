@@ -12,9 +12,9 @@ config.py 中的 SCHEDULER_TIMEZONE 设置保持一致。
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime, timezone
-from typing import Any
 from uuid import uuid4
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -55,7 +55,7 @@ class PushScheduler:
 
     def __init__(self) -> None:
         """初始化 PushScheduler。"""
-        settings = get_settings()
+        settings: Settings = get_settings()
         self._scheduler: AsyncIOScheduler = AsyncIOScheduler(
             timezone=settings.SCHEDULER_TIMEZONE,
         )
@@ -119,7 +119,7 @@ class PushScheduler:
             return schedule.schedule_id
 
         # 解析 cron 表达式（5 个字段：分 时 日 月 星期）
-        cron_parts = schedule.cron_expression.split()
+        cron_parts: Any = schedule.cron_expression.split()
         if len(cron_parts) != 5:
             logger.error(
                 "Invalid cron expression",
@@ -128,7 +128,7 @@ class PushScheduler:
             )
             return schedule.schedule_id
 
-        trigger = CronTrigger(
+        trigger: CronTrigger = CronTrigger(
             minute=cron_parts[0],
             hour=cron_parts[1],
             day=cron_parts[2],
@@ -137,7 +137,7 @@ class PushScheduler:
             timezone=schedule.timezone,
         )
 
-        job = self._scheduler.add_job(
+        job: Any = self._scheduler.add_job(
             self._execute_scheduled_push,
             trigger=trigger,
             args=[schedule.schedule_id],
@@ -175,7 +175,7 @@ class PushScheduler:
         if schedule_id not in self._schedules:
             return False
 
-        schedule = self._schedules.pop(schedule_id)
+        schedule: Any = self._schedules.pop(schedule_id)
         if schedule.enabled:
             try:
                 self._scheduler.remove_job(schedule_id)
@@ -195,7 +195,7 @@ class PushScheduler:
 
     def update_schedule_status(self, schedule_id: str, enabled: bool) -> bool:
         """启用或禁用一个调度。"""
-        schedule = self._schedules.get(schedule_id)
+        schedule: Skill | None = self._schedules.get(schedule_id)
         if not schedule:
             return False
 
@@ -226,7 +226,7 @@ class PushScheduler:
         由 APScheduler 在 cron 触发器触发时调用。
         渲染模板并向目标用户发送推送消息。
         """
-        schedule = self._schedules.get(schedule_id)
+        schedule: Skill | None = self._schedules.get(schedule_id)
         if not schedule or not schedule.enabled:
             logger.warning(
                 "Scheduled push skipped — schedule not found or disabled",
@@ -245,15 +245,15 @@ class PushScheduler:
         schedule.run_count += 1
 
         # 确定目标用户
-        target_users = schedule.target_users if schedule.target_users else ["@all"]
+        target_users: Any = schedule.target_users if schedule.target_users else ["@all"]
 
         # 渲染模板（简单的字符串替换 — 不依赖 Jinja2）
-        title = self._render_template(schedule.title_template, schedule)
-        content = self._render_template(schedule.content_template, schedule)
+        title: str = self._render_template(schedule.title_template, schedule)
+        content: str = self._render_template(schedule.content_template, schedule)
 
         # 向每个目标用户发送推送
         for user_id in target_users:
-            push_msg = PushMessage(
+            push_msg: PushMessage = PushMessage(
                 message_id=f"msg-{uuid4().hex[:12]}",
                 agent_id=schedule.agent_id,
                 user_id=user_id,
@@ -287,7 +287,7 @@ class PushScheduler:
         """
         if not template:
             return ""
-        now = datetime.now(timezone.utc)
+        now: Any = datetime.now(timezone.utc)
         return template.format(
             agent_id=schedule.agent_id,
             schedule_name=schedule.name,
@@ -308,7 +308,7 @@ class PushScheduler:
         Returns:
             包含状态和详情的结果字典。
         """
-        schedule = self._schedules.get(schedule_id)
+        schedule: Skill | None = self._schedules.get(schedule_id)
         if not schedule:
             return {"status": "error", "message": "Schedule not found"}
 
@@ -340,7 +340,7 @@ class PushScheduler:
             已创建的调度 ID 列表。
         """
         # 移除此 Agent 的现有调度
-        existing_ids = [
+        existing_ids: list[Any] = [
             sid
             for sid, sched in self._schedules.items()
             if sched.agent_id == agent_id
@@ -351,11 +351,11 @@ class PushScheduler:
         if not push_config.get("enabled", False):
             return []
 
-        schedules_data = push_config.get("schedules", [])
+        schedules_data: Skill | None = push_config.get("schedules", [])
         created_ids: list[str] = []
 
         for sched_data in schedules_data:
-            schedule = PushSchedule(
+            schedule: PushSchedule = PushSchedule(
                 agent_id=agent_id,
                 name=sched_data.get("name", f"Push-{agent_id}"),
                 description=sched_data.get("description", ""),
@@ -370,7 +370,7 @@ class PushScheduler:
                 title_template=sched_data.get("title_template", ""),
                 content_template=sched_data.get("content_template", ""),
             )
-            sid = self.add_schedule(schedule)
+            sid: str = self.add_schedule(schedule)
             created_ids.append(sid)
 
         return created_ids

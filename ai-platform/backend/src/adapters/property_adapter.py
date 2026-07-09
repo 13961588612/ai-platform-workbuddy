@@ -6,8 +6,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.adapters.base import BusinessSystemAdapter, ToolDefinition, ToolResult
 
@@ -153,7 +153,7 @@ class PropertyAdapter(BusinessSystemAdapter):
         Returns:
             包含物业 API 响应数据或错误信息的 ``ToolResult``。
         """
-        get_tools = {
+        get_tools: dict[str, Any] = {
             "query_repair_status": "/api/repairs",
             "query_inspection_records": "/api/inspections",
             "query_energy_consumption": "/api/energy",
@@ -162,9 +162,9 @@ class PropertyAdapter(BusinessSystemAdapter):
             "query_property_contracts": "/api/contracts",
         }
         if tool_name in get_tools:
-            data = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
+            data: dict[str, Any] = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
             return ToolResult(success=True, data=data)
         elif tool_name == "create_repair_request":
-            data = await self._http_request("POST", "/api/repairs", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request("POST", "/api/repairs", credential, json_body=arguments)
             return ToolResult(success=True, data=data)
         return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

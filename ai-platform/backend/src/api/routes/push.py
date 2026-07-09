@@ -12,9 +12,9 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime, timezone
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -122,11 +122,11 @@ async def list_approvals(
 ) -> dict[str, Any]:
     """列出审批请求，可按状态和/或用户筛选。"""
     try:
-        manager = get_approval_manager()
+        manager: ApprovalManager = get_approval_manager()
         approval_status: ApprovalStatus | None = None
         if status_filter:
             try:
-                approval_status = ApprovalStatus(status_filter)
+                approval_status: ApprovalStatus = ApprovalStatus(status_filter)
             except ValueError:
                 return error_response(
                     code=400,
@@ -135,15 +135,15 @@ async def list_approvals(
                 )
 
         # 如果未指定 user_id，使用当前用户（适用于非管理员用户）
-        target_user_id = user_id or user.get("user_id", "")
+        target_user_id: Any = user_id or user.get("user_id", "")
 
-        records = await manager.list_approvals(
+        records: dict[str, Any] = await manager.list_approvals(
             user_id=target_user_id if target_user_id else None,
             status=approval_status,
             limit=limit,
         )
 
-        data = [_to_approval_response(r) for r in records]
+        data: list[Any] = [_to_approval_response(r) for r in records]
         return success(data, trace_id=trace_id)
     except Exception as exc:
         logger.error("Failed to list approvals", error=str(exc))
@@ -161,8 +161,8 @@ async def get_approval_stats(
 ) -> dict[str, Any]:
     """获取审批统计摘要。"""
     try:
-        manager = get_approval_manager()
-        stats = await manager.get_stats()
+        manager: ApprovalManager = get_approval_manager()
+        stats: RouteStats = await manager.get_stats()
         return success(stats, trace_id=trace_id)
     except Exception as exc:
         logger.error("Failed to get approval stats", error=str(exc))
@@ -181,8 +181,8 @@ async def get_approval(
 ) -> dict[str, Any]:
     """按 ID 获取单个审批。"""
     try:
-        manager = get_approval_manager()
-        record = await manager.get_approval(approval_id)
+        manager: ApprovalManager = get_approval_manager()
+        record: dict[str, Any] = await manager.get_approval(approval_id)
         if not record:
             return error_response(
                 code=404,
@@ -208,10 +208,10 @@ async def respond_to_approval(
 ) -> dict[str, Any]:
     """响应审批请求（批准/拒绝）。"""
     try:
-        manager = get_approval_manager()
-        current_user_id = user.get("user_id", "")
+        manager: ApprovalManager = get_approval_manager()
+        current_user_id: Skill | None = user.get("user_id", "")
 
-        record = await manager.respond_to_approval(
+        record: dict[str, Any] = await manager.respond_to_approval(
             approval_id=approval_id,
             decision=req.decision,
             user_id=current_user_id,
@@ -262,9 +262,9 @@ async def list_schedules(
 ) -> dict[str, Any]:
     """列出所有推送计划。"""
     try:
-        scheduler = get_push_scheduler()
-        schedules = scheduler.list_schedules()
-        data = [
+        scheduler: PushScheduler = get_push_scheduler()
+        schedules: dict[str, Any] = scheduler.list_schedules()
+        data: list[dict[str, Any]] = [
             {
                 "scheduleId": s.schedule_id,
                 "agentId": s.agent_id,
@@ -301,8 +301,8 @@ async def create_schedule(
     try:
         from src.push.models import PushSchedule
 
-        scheduler = get_push_scheduler()
-        schedule = PushSchedule(
+        scheduler: PushScheduler = get_push_scheduler()
+        schedule: PushSchedule = PushSchedule(
             agent_id=req.agent_id,
             name=req.name,
             description=req.description,
@@ -314,7 +314,7 @@ async def create_schedule(
             title_template=req.title_template,
             content_template=req.content_template,
         )
-        schedule_id = scheduler.add_schedule(schedule)
+        schedule_id: str = scheduler.add_schedule(schedule)
         return success(
             {"scheduleId": schedule_id, "status": "created"},
             message="Schedule created successfully",
@@ -337,8 +337,8 @@ async def delete_schedule(
 ) -> dict[str, Any]:
     """删除推送计划。"""
     try:
-        scheduler = get_push_scheduler()
-        removed = scheduler.remove_schedule(schedule_id)
+        scheduler: PushScheduler = get_push_scheduler()
+        removed: bool = scheduler.remove_schedule(schedule_id)
         if not removed:
             return error_response(
                 code=404,
@@ -367,8 +367,8 @@ async def execute_schedule(
 ) -> dict[str, Any]:
     """手动触发定时推送。"""
     try:
-        scheduler = get_push_scheduler()
-        result = await scheduler.execute_push(schedule_id)
+        scheduler: PushScheduler = get_push_scheduler()
+        result: dict[str, Any] = await scheduler.execute_push(schedule_id)
         return success(result, trace_id=trace_id)
     except Exception as exc:
         logger.error("Failed to execute push schedule", error=str(exc))
@@ -390,8 +390,8 @@ async def send_push_message(
 ) -> dict[str, Any]:
     """通过企业微信向用户发送直接推送消息。"""
     try:
-        pusher = get_wecom_pusher()
-        push_msg = PushMessage(
+        pusher: WecomPusher = get_wecom_pusher()
+        push_msg: PushMessage = PushMessage(
             agent_id=req.agent_id,
             user_id=req.user_id,
             msg_type=PushMessageType(req.msg_type),
@@ -401,7 +401,7 @@ async def send_push_message(
             status=PushMessageStatus.PENDING,
             trace_id=trace_id,
         )
-        result = await pusher.send_push_message(push_msg)
+        result: dict[str, Any] = await pusher.send_push_message(push_msg)
         return success(
             {
                 "status": result.status.value,
@@ -429,10 +429,10 @@ async def push_health_check(
 ) -> dict[str, Any]:
     """推送服务健康检查。"""
     try:
-        scheduler = get_push_scheduler()
-        schedules = scheduler.list_schedules()
-        manager = get_approval_manager()
-        stats = await manager.get_stats()
+        scheduler: PushScheduler = get_push_scheduler()
+        schedules: dict[str, Any] = scheduler.list_schedules()
+        manager: ApprovalManager = get_approval_manager()
+        stats: RouteStats = await manager.get_stats()
 
         return success(
             {

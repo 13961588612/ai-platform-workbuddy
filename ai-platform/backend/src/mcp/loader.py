@@ -1,9 +1,9 @@
 """从 Agent 的 system/mcp-servers.yaml 文件加载 MCP Server 定义。"""
 
 from __future__ import annotations
+from typing import Any
 
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -32,7 +32,7 @@ def _parse_transport(raw: str) -> MCPTransportType:
     Returns:
         对应的传输枚举；未知值时回退为 HTTP 并记录警告。
     """
-    key = raw.strip().lower()
+    key: str = raw.strip().lower()
     if key not in _TRANSPORT_ALIASES:
         logger.warning("Unknown MCP transport, defaulting to http", transport=raw)
         return MCPTransportType.HTTP
@@ -48,8 +48,8 @@ def _parse_server(entry: dict[str, Any]) -> MCPServerConfig | None:
     Returns:
         解析成功时返回配置对象；缺少 ``name`` 或 ``endpoint`` 时返回 ``None``。
     """
-    name = entry.get("name")
-    endpoint = entry.get("endpoint", "")
+    name: Skill | None = entry.get("name")
+    endpoint: Skill | None = entry.get("endpoint", "")
     if not name:
         return None
     if not endpoint:
@@ -74,25 +74,25 @@ def load_mcp_servers_from_files(
     config_base: Path | None = None,
 ) -> int:
     """注册 configs/agents/*/system/mcp-servers.yaml 下声明的 MCP Server。"""
-    base = config_base or Path(get_settings().CONFIG_BASE_PATH)
-    agents_dir = base / "agents"
+    base: Any = config_base or Path(get_settings().CONFIG_BASE_PATH)
+    agents_dir: Any = base / "agents"
     if not agents_dir.is_dir():
         logger.warning("Agents config directory not found", path=str(agents_dir))
         return 0
 
-    loaded = 0
+    loaded: int = 0
     seen: set[str] = set()
 
     for agent_dir in sorted(agents_dir.iterdir()):
         if not agent_dir.is_dir():
             continue
-        mcp_file = agent_dir / "system" / "mcp-servers.yaml"
+        mcp_file: Any = agent_dir / "system" / "mcp-servers.yaml"
         if not mcp_file.is_file():
             continue
 
         try:
             with open(mcp_file, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
+                data: Any = yaml.safe_load(f) or {}
         except yaml.YAMLError as exc:
             logger.error("Invalid MCP servers YAML", path=str(mcp_file), error=str(exc))
             continue
@@ -103,7 +103,7 @@ def load_mcp_servers_from_files(
             if entry.get("enabled", True) is False:
                 continue
 
-            config = _parse_server(entry)
+            config: MCPServerConfig | None = _parse_server(entry)
             if config is None:
                 continue
             if config.name in seen:

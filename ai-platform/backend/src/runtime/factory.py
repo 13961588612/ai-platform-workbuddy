@@ -5,8 +5,8 @@ RuntimeRegistry 中。
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.runtime.base import AgentRuntime
 from src.runtime.openharness import OpenHarnessRuntime
@@ -21,7 +21,7 @@ class OpenHarnessFactory:
 
     def create(self, config: Any) -> AgentRuntime:
         """创建并返回一个新的 OpenHarnessRuntime 实例。"""
-        runtime = OpenHarnessRuntime()
+        runtime: OpenHarnessRuntime = OpenHarnessRuntime()
         return runtime
 
     def validate_config(self, config: Any) -> bool:
@@ -41,8 +41,8 @@ class OpenHarnessFactory:
         if not hasattr(config, "runtime") or config.runtime is None:
             return True
 
-        runtime = config.runtime
-        runtime_type = getattr(runtime, "type", "openharness")
+        runtime: Any = config.runtime
+        runtime_type: Any = getattr(runtime, "type", "openharness")
 
         # 若指定了类型，则运行时类型必须为 'openharness'
         if runtime_type and runtime_type != "openharness":
@@ -54,20 +54,20 @@ class OpenHarnessFactory:
             return False
 
         # Validate runtime params
-        params = getattr(runtime, "params", {}) or {}
-        max_steps = params.get("maxSteps")
+        params: Any = getattr(runtime, "params", {}) or {}
+        max_steps: Skill | None = params.get("maxSteps")
         if max_steps is not None:
             if not isinstance(max_steps, int) or max_steps < 1:
                 logger.warning("Invalid maxSteps", value=max_steps)
                 return False
 
-        temperature = params.get("temperature")
+        temperature: Skill | None = params.get("temperature")
         if temperature is not None:
             if not isinstance(temperature, int | float) or temperature < 0 or temperature > 2:
                 logger.warning("Invalid temperature", value=temperature)
                 return False
 
-        max_tokens = params.get("maxTokens")
+        max_tokens: Skill | None = params.get("maxTokens")
         if max_tokens is not None:
             if not isinstance(max_tokens, int) or max_tokens < 1:
                 logger.warning("Invalid maxTokens", value=max_tokens)
@@ -103,7 +103,7 @@ def register_default_runtimes() -> RuntimeRegistry:
 
     在应用启动时调用。OpenHarness 运行时会作为默认项注册。
     """
-    registry = get_runtime_registry()
+    registry: RuntimeRegistry = get_runtime_registry()
 
     # Register OpenHarness as default
     registry.register(
@@ -127,5 +127,5 @@ def create_runtime(type_name: str | None, config: Any) -> AgentRuntime:
     Returns:
         一个已初始化的 AgentRuntime 实例。
     """
-    registry = get_runtime_registry()
+    registry: RuntimeRegistry = get_runtime_registry()
     return registry.create(type_name, config)

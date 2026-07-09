@@ -53,6 +53,8 @@ def build_payload(data: dict[str, Any]) -> dict[str, Any]:
 - `from __future__ import annotations` 下的前向引用写法允许
 - 推导式内的隐式循环变量可不单独注解，但推导式结果变量必须注解
 - 测试里对第三方 mock 对象，可用 `Any`，但赋值仍应写成 `mock_client: Any = ...`
+- `global` 变量在函数内**不能**写 `name: T = ...`（SyntaxError）；类型写在模块顶层，函数内只写 `name = ...`
+- 元组解包不能写 `a: T, b: U = ...`；先 `a: T` / `b: U` 再 `a, b = ...`
 
 ## 修改现有代码时
 

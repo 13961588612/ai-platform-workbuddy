@@ -5,8 +5,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.config import get_settings
 from src.router.models import RouteResult, SessionContext, UserRequest

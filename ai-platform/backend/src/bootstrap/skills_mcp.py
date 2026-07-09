@@ -1,8 +1,8 @@
 """Skills 和 MCP 子系统的启动/关闭辅助函数。"""
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.mcp.discovery import MCPDiscovery
 from src.mcp.loader import load_mcp_servers_from_files
@@ -38,26 +38,26 @@ async def initialize_skills_and_mcp() -> dict[str, Any]:
     from src.api.routes.mcp import set_discovery, set_manager
     from src.api.routes.skill import set_registry
 
-    registry = SkillRegistry(
+    registry: SkillRegistry = SkillRegistry(
         indexer=VectorIndexer(),
         cache=HotSkillCache(),
     )
-    skills_loaded = await load_skills_from_files(registry, enabled_only=True)
+    skills_loaded: int = await load_skills_from_files(registry, enabled_only=True)
     set_registry(registry)
     _skill_registry = registry
 
-    manager = MCPManager()
-    mcp_loaded = load_mcp_servers_from_files(manager)
+    manager: MCPManager = MCPManager()
+    mcp_loaded: int = load_mcp_servers_from_files(manager)
     set_manager(manager)
     _mcp_manager = manager
 
-    discovery = MCPDiscovery(manager, registry)
+    discovery: MCPDiscovery = MCPDiscovery(manager, registry)
     set_discovery(discovery)
     _mcp_discovery = discovery
 
-    connected = 0
+    connected: int = 0
     try:
-        connected = await manager.auto_connect_all()
+        connected: int = await manager.auto_connect_all()
     except Exception as exc:
         logger.warning("MCP auto-connect failed", error=str(exc))
 

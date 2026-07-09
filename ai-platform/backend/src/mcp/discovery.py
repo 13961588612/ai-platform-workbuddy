@@ -74,12 +74,12 @@ class MCPDiscovery:
             logger.error("No SkillRegistry set; cannot register discovered tools")
             return []
 
-        tools = await self.list_tools(server_name)
-        category = self._infer_category(server_name)
+        tools: dict[str, Any] = await self.list_tools(server_name)
+        category: str = self._infer_category(server_name)
 
         new_skills: list[Skill] = []
         for tool in tools:
-            skill = self._tool_to_skill(server_name, tool, category)
+            skill: Skill = self._tool_to_skill(server_name, tool, category)
             await self._registry.register(skill)
             new_skills.append(skill)
 
@@ -99,8 +99,8 @@ class MCPDiscovery:
         category: str,
     ) -> Skill:
         """将原始 MCP 工具描述转换为 Skill。"""
-        tool_name = tool.get("name", "unknown")
-        skill_id = f"mcp-{server_name}-{tool_name}"
+        tool_name: Skill | None = tool.get("name", "unknown")
+        skill_id: str = f"mcp-{server_name}-{tool_name}"
 
         return Skill(
             skill_id=skill_id,
@@ -123,7 +123,7 @@ class MCPDiscovery:
     @staticmethod
     def _infer_category(server_name: str) -> str:
         """从 MCP 服务器名称推断 Skill 分类。"""
-        name_lower = server_name.lower()
+        name_lower: str = server_name.lower()
         for keyword, category in _SERVER_CATEGORY_MAP.items():
             if keyword in name_lower:
                 return category
@@ -135,10 +135,10 @@ class MCPDiscovery:
         返回 server_name → 已注册 Skill 列表的映射。
         """
         results: dict[str, list[Skill]] = {}
-        servers = self._manager.list_servers()
+        servers: dict[str, Any] = self._manager.list_servers()
         for config in servers:
             try:
-                skills = await self.discover_and_register(config.name)
+                skills: dict[str, Any] = await self.discover_and_register(config.name)
                 results[config.name] = skills
             except Exception:
                 logger.exception(

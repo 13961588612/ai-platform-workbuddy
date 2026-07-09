@@ -10,8 +10,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -97,7 +97,7 @@ async def create_session(
 ) -> dict[str, Any]:
     """创建带有渠道特定 ID 命名的新聊天会话。"""
     try:
-        session = await session_manager.create_session(
+        session: dict[str, Any] = await session_manager.create_session(
             agent_id=req.agent_id,
             user_id=req.user_id,
             channel=req.channel,
@@ -125,7 +125,7 @@ async def get_session(
 ) -> dict[str, Any]:
     """获取会话详情，包括消息历史。"""
     try:
-        session = await session_manager.get_session(session_id)
+        session: dict[str, Any] = await session_manager.get_session(session_id)
         return success(
             data=SessionResponse(
                 session_id=session.session_id,
@@ -162,8 +162,8 @@ async def get_messages(
 ) -> dict[str, Any]:
     """获取会话中的所有消息。"""
     try:
-        session = await session_manager.get_session(session_id)
-        messages = [
+        session: dict[str, Any] = await session_manager.get_session(session_id)
+        messages: list[dict[str, Any]] = [
             MessageResponse(
                 id=msg.id,
                 role=msg.role,
@@ -195,10 +195,10 @@ async def send_message(
         from src.runtime.events import AgentEventType
 
         # 获取会话
-        session = await session_manager.get_session(session_id)
+        session: dict[str, Any] = await session_manager.get_session(session_id)
 
         # 添加用户消息
-        user_msg = await session_manager.add_message(
+        user_msg: Message = await session_manager.add_message(
             session_id=session_id,
             role=req.role,
             content=req.content,
@@ -206,7 +206,7 @@ async def send_message(
         )
 
         # 确保 Agent 已注册并处于 RUNNING（支持启动时未同步的懒加载）
-        instance = await agent_manager.ensure_agent_ready(session.agent_id)
+        instance: AgentInstance = await agent_manager.ensure_agent_ready(session.agent_id)
 
         # 收集 runtime 流式事件
         response_parts: list[str] = []
@@ -219,13 +219,13 @@ async def send_message(
             if event.type == AgentEventType.TEXT_DELTA and event.content:
                 response_parts.append(event.content)
             elif event.type == AgentEventType.TOOL_RESULT and event.result:
-                err = event.result.get("error")
+                err: Skill | None = event.result.get("error")
                 if err:
                     tool_errors.append(f"{event.tool_name}: {err}")
             elif event.type == AgentEventType.ERROR:
-                runtime_error = event.message or "Agent runtime error"
+                runtime_error: Any = event.message or "Agent runtime error"
 
-        response_text = "".join(response_parts)
+        response_text: str = "".join(response_parts)
 
         # 工具失败已转为 tool.result，不应中断；仅无有效回复时的致命错误返回 500
         if runtime_error and not response_text.strip():
@@ -280,7 +280,7 @@ async def route_request(
     不处理消息——请使用 /sessions/{id}/messages 处理消息。
     """
     try:
-        user_request = UserRequest(
+        user_request: UserRequest = UserRequest(
             text=req.text,
             user_id=req.user_id,
             session_id=req.session_id,

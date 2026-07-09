@@ -10,10 +10,10 @@ FastAPI 应用入口。
 """
 
 from __future__ import annotations
+from typing import Any
 
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
-from typing import Any
 
 import structlog
 from fastapi import FastAPI, Request, status
@@ -38,8 +38,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     - APScheduler（推送调度、记忆遗忘）
     - ConfigWatcher（热重载）
     """
-    settings = get_settings()
-    logger = structlog.get_logger("lifespan")
+    settings: Settings = get_settings()
+    logger: structlog.stdlib.BoundLogger = structlog.get_logger("lifespan")
 
     logger.info(
         "Application starting",
@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from src.llm.gateway import get_llm_gateway
 
     try:
-        gateway = get_llm_gateway()
+        gateway: LLMGateway = get_llm_gateway()
         gateway.initialize()
         logger.info("LLM Gateway initialized")
     except Exception as exc:
@@ -81,14 +81,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from src.config_manager.manager import get_config_manager
 
     try:
-        config_manager = get_config_manager()
+        config_manager: ConfigManager = get_config_manager()
         await config_manager.initialize()
         logger.info("ConfigManager initialized")
 
         # 注册配置变更回调以更新 AgentRouter
         from src.router.agent_router import get_agent_router
 
-        router = get_agent_router()
+        router: AgentRouter = get_agent_router()
 
         async def on_config_change(agent_id: str, change_type: str, config: Any) -> None:
             """配置变更时更新 AgentRouter 候选列表。"""
@@ -100,7 +100,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         config_manager.on_config_change(on_config_change)
 
         # 设置初始路由候选项
-        configs = config_manager.list_configs()
+        configs: dict[str, Any] = config_manager.list_configs()
         router.set_candidates(configs)
         logger.info("AgentRouter candidates set", count=len(configs))
     except Exception as exc:
@@ -110,7 +110,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         from src.push.scheduler import get_push_scheduler
 
-        push_scheduler = get_push_scheduler()
+        push_scheduler: PushScheduler = get_push_scheduler()
         await push_scheduler.start()
         logger.info("PushScheduler started")
     except Exception as exc:
@@ -120,7 +120,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         from src.hitl.approval import get_approval_manager
 
-        approval_manager = get_approval_manager()
+        approval_manager: ApprovalManager = get_approval_manager()
         # 执行初始超时检查
         await approval_manager.check_timeouts()
         logger.info("HITL ApprovalManager initialized")
@@ -131,7 +131,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         from src.bootstrap.skills_mcp import initialize_skills_and_mcp
 
-        skills_mcp_stats = await initialize_skills_and_mcp()
+        skills_mcp_stats: dict[str, Any] = await initialize_skills_and_mcp()
         logger.info("Skills and MCP initialized", **skills_mcp_stats)
     except Exception as exc:
         logger.warning("Skills/MCP init deferred", error=str(exc))
@@ -142,10 +142,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from src.config_manager.manager import get_config_manager
         from src.llm.gateway import get_llm_gateway
 
-        agent_manager = get_agent_manager()
+        agent_manager: AgentManager = get_agent_manager()
         agent_manager.set_llm_gateway(get_llm_gateway())
-        config_manager = get_config_manager()
-        synced = await agent_manager.sync_from_configs(config_manager.list_configs())
+        config_manager: ConfigManager = get_config_manager()
+        synced: int = await agent_manager.sync_from_configs(config_manager.list_configs())
         logger.info("Agents synced from configs", count=synced)
     except Exception as exc:
         logger.warning("Agent sync deferred", error=str(exc))
@@ -155,8 +155,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from src.agent.manager import get_agent_manager
         from src.queue.inbound_worker import start_inbound_stream_worker
 
-        agent_manager = get_agent_manager()
-        agent_ids = [inst.id for inst in agent_manager.list_agents()]
+        agent_manager: AgentManager = get_agent_manager()
+        agent_ids: list[Any] = [inst.id for inst in agent_manager.list_agents()]
         await start_inbound_stream_worker(agent_ids)
         logger.info("Inbound stream worker started", agent_streams=agent_ids)
     except Exception as exc:
@@ -221,12 +221,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用实例。"""
-    settings = get_settings()
+    settings: Settings = get_settings()
 
     # 配置日志
     configure_logging()
 
-    app = FastAPI(
+    app: FastAPI = FastAPI(
         title="AI Platform — Agent Core",
         description="企业内部 AI 平台后端服务 — Agent 生命周期管理、智能路由、LLM 网关、Skills 调度",
         version=settings.APP_VERSION,
@@ -251,13 +251,13 @@ def create_app() -> FastAPI:
         """为每个请求注入 traceId 以支持分布式追踪。"""
         import uuid
 
-        trace_id = request.headers.get("X-Trace-Id", str(uuid.uuid4()))
+        trace_id: Skill | None = request.headers.get("X-Trace-Id", str(uuid.uuid4()))
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(
             trace_id=trace_id,
             service=settings.APP_NAME,
         )
-        response = await call_next(request)
+        response: Any = await call_next(request)
         response.headers["X-Trace-Id"] = trace_id
         return response
 
@@ -276,7 +276,7 @@ def create_app() -> FastAPI:
         否则返回 503。
         """
         checks: dict[str, str] = {}
-        all_healthy = True
+        all_healthy: bool = True
 
         # PostgreSQL 检查
         try:
@@ -284,38 +284,38 @@ def create_app() -> FastAPI:
 
             from src.db.session import get_engine
 
-            engine = get_engine()
+            engine: AsyncEngine = get_engine()
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
             checks["postgres"] = "ok"
         except Exception:
             checks["postgres"] = "error"
-            all_healthy = False
+            all_healthy: bool = False
 
         # Redis 检查
         try:
             import redis.asyncio as aioredis
 
-            redis_client = aioredis.from_url(settings.redis_url)
+            redis_client: Any = aioredis.from_url(settings.redis_url)
             await redis_client.ping()
             await redis_client.close()
             checks["redis"] = "ok"
         except Exception:
             checks["redis"] = "error"
-            all_healthy = False
+            all_healthy: bool = False
 
         # Qdrant 检查
         try:
             from qdrant_client import QdrantClient
 
-            qdrant = QdrantClient(url=settings.qdrant_url)
+            qdrant: QdrantClient = QdrantClient(url=settings.qdrant_url)
             qdrant.get_collections()
             checks["qdrant"] = "ok"
         except Exception:
             checks["qdrant"] = "error"
-            all_healthy = False
+            all_healthy: bool = False
 
-        http_status = (
+        http_status: Any = (
             status.HTTP_200_OK if all_healthy else status.HTTP_503_SERVICE_UNAVAILABLE
         )
         return JSONResponse(
@@ -357,7 +357,7 @@ def main() -> None:
     """使用 uvicorn 运行应用（用于直接 python 执行）。"""
     import uvicorn
 
-    settings = get_settings()
+    settings: Settings = get_settings()
     uvicorn.run(
         "src.main:app",
         host=settings.HOST,

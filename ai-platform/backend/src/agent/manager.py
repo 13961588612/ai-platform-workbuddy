@@ -5,10 +5,10 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
-from typing import Any
 
 from src.agent.config import AgentConfig
 from src.agent.lifecycle import InstanceState, LifecycleEvent, LifecycleStateMachine
@@ -75,7 +75,7 @@ class AgentInstance:
         self.active_sessions += 1
         try:
             # 构建运行时所需的消息列表
-            messages = session.get_messages()
+            messages: dict[str, Any] = session.get_messages()
             messages.append(message.to_dict())
 
             # 通过运行时执行
@@ -90,7 +90,7 @@ class AgentInstance:
 
     async def health_check(self) -> HealthStatus:
         """检查此 Agent 实例的健康状态。"""
-        runtime_health = await self.runtime.health_check()
+        runtime_health: HealthStatus = await self.runtime.health_check()
         return HealthStatus(
             healthy=runtime_health.healthy and self.lifecycle.is_active(),
             details={
@@ -149,14 +149,14 @@ class AgentManager:
             raise AgentAlreadyExistsError(config.agent_id)
 
         # Create runtime via registry
-        runtime_type = config.runtime.type if config.runtime else None
-        runtime = create_runtime(runtime_type, config)
+        runtime_type: Any = config.runtime.type if config.runtime else None
+        runtime: AgentRuntime = create_runtime(runtime_type, config)
 
         # Inject LLM gateway if available
         if self._llm_gateway is not None and hasattr(runtime, "set_llm_gateway"):
             runtime.set_llm_gateway(self._llm_gateway)
 
-        instance = AgentInstance(config=config, runtime=runtime)
+        instance: AgentInstance = AgentInstance(config=config, runtime=runtime)
         await instance.initialize()
         self._instances[config.agent_id] = instance
 
@@ -165,36 +165,36 @@ class AgentManager:
 
     async def start_agent(self, agent_id: str) -> InstanceState:
         """启动一个 Agent 实例（CREATED/STOPPED → RUNNING）。"""
-        instance = self._get_instance(agent_id)
+        instance: AgentInstance = self._get_instance(agent_id)
         instance.started_at = datetime.now(timezone.utc)
-        state = instance.lifecycle.transition(LifecycleEvent.START)
+        state: InstanceState = instance.lifecycle.transition(LifecycleEvent.START)
         logger.info("Agent started", agent_id=agent_id, state=state.value)
         return state
 
     async def pause_agent(self, agent_id: str) -> InstanceState:
         """暂停一个 Agent 实例（RUNNING → PAUSED）。"""
-        instance = self._get_instance(agent_id)
-        state = instance.lifecycle.transition(LifecycleEvent.PAUSE)
+        instance: AgentInstance = self._get_instance(agent_id)
+        state: InstanceState = instance.lifecycle.transition(LifecycleEvent.PAUSE)
         logger.info("Agent paused", agent_id=agent_id)
         return state
 
     async def resume_agent(self, agent_id: str) -> InstanceState:
         """恢复一个已暂停的 Agent 实例（PAUSED → RUNNING）。"""
-        instance = self._get_instance(agent_id)
-        state = instance.lifecycle.transition(LifecycleEvent.RESUME)
+        instance: AgentInstance = self._get_instance(agent_id)
+        state: InstanceState = instance.lifecycle.transition(LifecycleEvent.RESUME)
         logger.info("Agent resumed", agent_id=agent_id)
         return state
 
     async def stop_agent(self, agent_id: str) -> InstanceState:
         """停止一个 Agent 实例（转换到 STOPPED）。"""
-        instance = self._get_instance(agent_id)
-        state = instance.lifecycle.transition(LifecycleEvent.STOP)
+        instance: AgentInstance = self._get_instance(agent_id)
+        state: InstanceState = instance.lifecycle.transition(LifecycleEvent.STOP)
         logger.info("Agent stopped", agent_id=agent_id)
         return state
 
     async def delete_agent(self, agent_id: str) -> None:
         """永久删除一个 Agent 实例。"""
-        instance = self._get_instance(agent_id)
+        instance: AgentInstance = self._get_instance(agent_id)
         await instance.shutdown()
         instance.lifecycle.transition(LifecycleEvent.DELETE)
         del self._instances[agent_id]
@@ -214,8 +214,8 @@ class AgentManager:
 
         新配置对新会话生效。现有会话将继续使用旧配置直到完成。
         """
-        instance = self._get_instance(agent_id)
-        old_config = instance.config
+        instance: AgentInstance = self._get_instance(agent_id)
+        old_config: Any = instance.config
         instance.config = config
 
         # Re-initialize runtime with new config for new sessions
@@ -236,17 +236,17 @@ class AgentManager:
         旧运行时进入 DRAINING 状态，继续服务现有会话，
         新运行时处理新会话。
         """
-        instance = self._get_instance(agent_id)
+        instance: AgentInstance = self._get_instance(agent_id)
 
         # Create new runtime
-        new_runtime = create_runtime(runtime_type, instance.config)
+        new_runtime: AgentRuntime = create_runtime(runtime_type, instance.config)
         if self._llm_gateway is not None and hasattr(new_runtime, "set_llm_gateway"):
             new_runtime.set_llm_gateway(self._llm_gateway)
         await new_runtime.initialize(instance.config)
         await wire_agent_runtime(new_runtime, instance.config)
 
         # Drain old runtime
-        old_runtime = instance.runtime
+        old_runtime: Any = instance.runtime
         instance.lifecycle.transition(LifecycleEvent.DRAIN)
 
         # Switch to new runtime
@@ -266,12 +266,12 @@ class AgentManager:
         """根据 ConfigManager 的配置创建并启动 agent（幂等操作）。"""
         from src.utils.exceptions import AgentAlreadyExistsError
 
-        synced = 0
+        synced: int = 0
         for config in configs:
             try:
                 await self.create_agent(config)
             except AgentAlreadyExistsError:
-                instance = self._instances.get(config.agent_id)
+                instance: Skill | None = self._instances.get(config.agent_id)
                 if instance is not None:
                     await self.update_config(config.agent_id, config)
             except Exception as exc:
@@ -283,7 +283,7 @@ class AgentManager:
                 continue
 
             if config.agent_id in self._instances:
-                instance = self._instances[config.agent_id]
+                instance: Any = self._instances[config.agent_id]
                 if not instance.lifecycle.is_active():
                     await self.start_agent(config.agent_id)
                 synced += 1
@@ -297,7 +297,7 @@ class AgentManager:
 
         若启动时未同步成功，在首次发消息时从 ConfigManager 懒加载并启动。
         """
-        instance = self._instances.get(agent_id)
+        instance: Skill | None = self._instances.get(agent_id)
         if instance is not None:
             if not instance.lifecycle.is_active():
                 await self.start_agent(agent_id)
@@ -310,7 +310,7 @@ class AgentManager:
 
         from src.config_manager.manager import get_config_manager
 
-        config = await get_config_manager().get_config(agent_id)
+        config: AgentConfig = await get_config_manager().get_config(agent_id)
         await self.create_agent(config)
         await self.start_agent(agent_id)
         logger.info("Agent lazy-provisioned on demand", agent_id=agent_id)
@@ -318,7 +318,7 @@ class AgentManager:
 
     async def get_agent_health(self, agent_id: str) -> HealthStatus:
         """检查指定 Agent 的健康状态。"""
-        instance = self._get_instance(agent_id)
+        instance: AgentInstance = self._get_instance(agent_id)
         return await instance.health_check()
 
     async def shutdown_all(self) -> None:
@@ -333,7 +333,7 @@ class AgentManager:
 
     def _get_instance(self, agent_id: str) -> AgentInstance:
         """获取实例，若不存在则抛出 AgentNotFoundError。"""
-        instance = self._instances.get(agent_id)
+        instance: Skill | None = self._instances.get(agent_id)
         if instance is None:
             raise AgentNotFoundError(agent_id)
         return instance

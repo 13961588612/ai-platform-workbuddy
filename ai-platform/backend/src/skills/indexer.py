@@ -7,7 +7,7 @@ VectorIndexer — 构建和维护 Skills 的 Qdrant 向量索引。
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import httpx
 import structlog
@@ -51,8 +51,8 @@ class VectorIndexer:
         if self._collection_ready:
             return
         try:
-            collections = await self._qdrant.get_collections()
-            names = [c.name for c in collections.collections]
+            collections: Any = await self._qdrant.get_collections()
+            names: list[Any] = [c.name for c in collections.collections]
             if self._collection_name not in names:
                 await self._qdrant.create_collection(
                     collection_name=self._collection_name,
@@ -83,19 +83,19 @@ class VectorIndexer:
 
     async def generate_embedding(self, text: str) -> list[float]:
         """调用本地 Embedding 服务为 *text* 生成向量。"""
-        url = f"{self._embedding_url}/embed"
+        url: str = f"{self._embedding_url}/embed"
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(url, json={"text": text})
+            resp: Any = await client.post(url, json={"text": text})
             resp.raise_for_status()
-            data = resp.json()
+            data: Any = resp.json()
             return data.get("embedding", data.get("vector", []))
 
     async def index_skill(self, skill: Skill) -> None:
         """为 *skill* 生成 embedding 并 upsert 到 Qdrant。"""
         await self.ensure_collection()
-        text = skill.index_text()
+        text: str = skill.index_text()
         try:
-            vector = await self.generate_embedding(text)
+            vector: list[float] = await self.generate_embedding(text)
         except Exception:
             logger.exception(
                 "Failed to generate embedding for skill",
@@ -105,7 +105,7 @@ class VectorIndexer:
 
         skill.embedding = vector
 
-        point = qdrant_models.PointStruct(
+        point: PointStruct = qdrant_models.PointStruct(
             id=skill.skill_id,
             vector=vector,
             payload={
@@ -130,7 +130,7 @@ class VectorIndexer:
         返回成功建立索引的 Skill 数量。
         """
         await self.ensure_collection()
-        count = 0
+        count: int = 0
         for skill in skills:
             try:
                 await self.index_skill(skill)
@@ -191,7 +191,7 @@ class VectorIndexer:
                 )
             )
 
-        results = await self._qdrant.search(
+        results: list[dict] = await self._qdrant.search(
             collection_name=self._collection_name,
             query_vector=query_vector,
             limit=top_n,

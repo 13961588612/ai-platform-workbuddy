@@ -4,8 +4,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from fastapi import Depends, Header, HTTPException, status
 
@@ -69,10 +69,10 @@ async def get_current_user(
             detail="Missing or invalid Authorization header",
         )
 
-    token = authorization[7:]  # 去掉 "Bearer " 前缀
+    token: Any = authorization[7:]  # 去掉 "Bearer " 前缀
     try:
-        token_manager = TokenManager()
-        payload = token_manager.verify_access_token(token)
+        token_manager: TokenManager = TokenManager()
+        payload: TokenPayload = token_manager.verify_access_token(token)
         return payload.model_dump()
     except TokenError as exc:
         raise HTTPException(

@@ -7,8 +7,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.agent.config import AgentConfig
 from src.config import get_settings
@@ -85,7 +85,7 @@ class ConfigManager:
 
     async def reload_all(self) -> None:
         """从数据源重新加载所有 agent 配置。"""
-        configs = await self._loader.load_all_agents()
+        configs: list[AgentConfig] = await self._loader.load_all_agents()
         self._configs = {config.agent_id: config for config in configs}
         logger.info("All configs reloaded", count=len(self._configs))
 
@@ -105,7 +105,7 @@ class ConfigManager:
         if agent_id not in self._configs:
             # 尝试按需加载
             try:
-                config = await self._loader.load_agent_config(agent_id)
+                config: AgentConfig = await self._loader.load_agent_config(agent_id)
                 self._configs[agent_id] = config
                 return config
             except Exception:
@@ -189,8 +189,8 @@ class ConfigManager:
             self._configs.pop(agent_id, None)
         else:
             try:
-                config = await self._loader.load_agent_config(agent_id)
-                errors = self._validator.validate(config)
+                config: AgentConfig = await self._loader.load_agent_config(agent_id)
+                errors: list[str] = self._validator.validate(config)
                 if errors:
                     logger.error(
                         "Config validation failed on reload",
@@ -214,7 +214,7 @@ class ConfigManager:
         # 通知所有已注册的回调
         for callback in self._on_config_change_callbacks:
             try:
-                result = callback(agent_id, change_type, config)
+                result: Any = callback(agent_id, change_type, config)
                 if hasattr(result, "__await__"):
                     await result
             except Exception as exc:
@@ -229,10 +229,10 @@ class ConfigManager:
         import yaml
         from pathlib import Path
 
-        agent_dir = Path(self._settings.CONFIG_BASE_PATH) / "agents" / config.agent_id
+        agent_dir: Any = Path(self._settings.CONFIG_BASE_PATH) / "agents" / config.agent_id
         agent_dir.mkdir(parents=True, exist_ok=True)
 
-        data = {
+        data: dict[str, Any] = {
             "agent": {
                 "name": config.agent_id,
                 "display_name": config.display_name,
@@ -246,7 +246,7 @@ class ConfigManager:
                 },
             }
         }
-        agent_yaml = agent_dir / "agent.yaml"
+        agent_yaml: Any = agent_dir / "agent.yaml"
         with open(agent_yaml, "w", encoding="utf-8") as f:
             yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
@@ -259,7 +259,7 @@ class ConfigManager:
         from src.db.session import db_session_context
         from src.models.agent import AgentConfigModel
 
-        config_json = json.dumps(
+        config_json: str = json.dumps(
             {"agent": {
                 "name": config.agent_id,
                 "display_name": config.display_name,
@@ -271,11 +271,11 @@ class ConfigManager:
         )
 
         async with db_session_context() as session:
-            stmt = select(AgentConfigModel).where(
+            stmt: Any = select(AgentConfigModel).where(
                 AgentConfigModel.agent_id == config.agent_id
             )
-            result = await session.execute(stmt)
-            existing = result.scalar_one_or_none()
+            result: ToolResult = await session.execute(stmt)
+            existing: Any = result.scalar_one_or_none()
 
             if existing:
                 existing.display_name = config.display_name
@@ -289,7 +289,7 @@ class ConfigManager:
                 )
                 existing.runtime_type = config.runtime.type
             else:
-                record = AgentConfigModel(
+                record: AgentConfigModel = AgentConfigModel(
                     id=uuid.uuid4(),
                     agent_id=config.agent_id,
                     display_name=config.display_name,
@@ -311,7 +311,7 @@ class ConfigManager:
         import shutil
         from pathlib import Path
 
-        agent_dir = Path(self._settings.CONFIG_BASE_PATH) / "agents" / agent_id
+        agent_dir: Any = Path(self._settings.CONFIG_BASE_PATH) / "agents" / agent_id
         if agent_dir.exists():
             shutil.rmtree(agent_dir)
 
@@ -323,11 +323,11 @@ class ConfigManager:
         from src.models.agent import AgentConfigModel
 
         async with db_session_context() as session:
-            stmt = select(AgentConfigModel).where(
+            stmt: Any = select(AgentConfigModel).where(
                 AgentConfigModel.agent_id == agent_id
             )
-            result = await session.execute(stmt)
-            record = result.scalar_one_or_none()
+            result: ToolResult = await session.execute(stmt)
+            record: Any = result.scalar_one_or_none()
             if record:
                 record.is_deleted = True
                 record.is_active = False

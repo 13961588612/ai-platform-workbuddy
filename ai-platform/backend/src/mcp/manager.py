@@ -13,8 +13,8 @@ Server。提供以下方法：
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 import structlog
 from pydantic import BaseModel, Field
@@ -69,14 +69,14 @@ class MCPManager:
 
     async def connect(self, name: str) -> MCPClient:
         """建立到已注册 MCP Server 的连接。"""
-        config = self._configs.get(name)
+        config: Skill | None = self._configs.get(name)
         if not config:
             raise MCPClientError(f"MCP server '{name}' is not registered")
 
         if name in self._clients and self._clients[name].is_connected:
             return self._clients[name]
 
-        client = MCPClient(
+        client: MCPClient = MCPClient(
             server_name=config.name,
             transport=config.transport,
             endpoint=config.endpoint,
@@ -90,13 +90,13 @@ class MCPManager:
 
     async def disconnect(self, name: str) -> None:
         """关闭到 MCP Server 的连接。"""
-        client = self._clients.pop(name, None)
+        client: Any = self._clients.pop(name, None)
         if client:
             await client.disconnect()
 
     async def disconnect_all(self) -> None:
         """关闭所有 MCP Server 连接。"""
-        names = list(self._clients.keys())
+        names: list[Any] = list(self._clients.keys())
         for name in names:
             await self.disconnect(name)
 
@@ -104,14 +104,14 @@ class MCPManager:
 
     async def discover_tools(self, name: str) -> list[dict[str, Any]]:
         """列出已连接 MCP Server 暴露的所有工具。"""
-        client = await self._get_connected_client(name)
+        client: MCPClient = await self._get_connected_client(name)
         return await client.list_tools()
 
     async def call_tool(
         self, name: str, tool_name: str, args: dict[str, Any]
     ) -> dict[str, Any]:
         """在已连接 MCP Server 上调用工具。"""
-        client = await self._get_connected_client(name)
+        client: MCPClient = await self._get_connected_client(name)
         try:
             return await client.call_tool(tool_name, args)
         except Exception:
@@ -146,7 +146,7 @@ class MCPManager:
 
         返回成功建立的连接数。
         """
-        count = 0
+        count: int = 0
         for name, config in self._configs.items():
             if not config.auto_connect:
                 continue
@@ -164,7 +164,7 @@ class MCPManager:
 
     async def _get_connected_client(self, name: str) -> MCPClient:
         """返回 *name* 对应的已连接客户端，必要时自动连接。"""
-        client = self._clients.get(name)
+        client: Skill | None = self._clients.get(name)
         if client and client.is_connected:
             return client
         return await self.connect(name)

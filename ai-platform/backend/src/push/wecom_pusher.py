@@ -12,10 +12,10 @@ API 参考：
 """
 
 from __future__ import annotations
+from typing import Any
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any
 
 import httpx
 from pydantic import BaseModel
@@ -63,7 +63,7 @@ class WecomPusher:
 
     def __init__(self) -> None:
         """使用 config 中的设置初始化 WecomPusher。"""
-        settings = get_settings()
+        settings: Settings = get_settings()
         self._corp_id: str = settings.WECOM_CORP_ID
         self._agent_id: str = settings.WECOM_AGENT_ID
         self._secret: str = settings.WECOM_SECRET
@@ -92,7 +92,7 @@ class WecomPusher:
         通过 asyncio.Lock 实现线程安全。
         """
         async with self._lock:
-            now = datetime.now(timezone.utc)
+            now: Any = datetime.now(timezone.utc)
             if (
                 self._token_cache.access_token
                 and self._token_cache.expires_at > now
@@ -107,15 +107,15 @@ class WecomPusher:
                 )
                 raise RuntimeError("WeChat Work credentials not configured")
 
-            url = (
+            url: str = (
                 f"{WECOM_API_BASE}/gettoken"
                 f"?corpid={self._corp_id}&corpsecret={self._secret}"
             )
-            client = self._get_http_client()
+            client: httpx.AsyncClient = self._get_http_client()
             try:
-                response = await client.get(url)
+                response: Skill | None = await client.get(url)
                 response.raise_for_status()
-                data = response.json()
+                data: Any = response.json()
             except httpx.HTTPError as exc:
                 logger.error("Failed to get WeChat Work access token", error=str(exc))
                 raise RuntimeError(f"Failed to get access token: {exc}") from exc
@@ -130,8 +130,8 @@ class WecomPusher:
                     f"WeChat Work API error: {data.get('errcode')} - {data.get('errmsg')}"
                 )
 
-            token = data.get("access_token", "")
-            expires_in = data.get("expires_in", TOKEN_CACHE_TTL_SECONDS)
+            token: Skill | None = data.get("access_token", "")
+            expires_in: Skill | None = data.get("expires_in", TOKEN_CACHE_TTL_SECONDS)
             self._token_cache = WecomTokenCache(
                 access_token=token,
                 expires_at=datetime.now(timezone.utc)
@@ -149,15 +149,15 @@ class WecomPusher:
         返回 API 响应字典。
         在 API 错误时抛出 RuntimeError。
         """
-        token = await self._get_access_token()
-        url = f"{WECOM_API_BASE}/message/send?access_token={token}"
-        body = message.to_api_dict()
+        token: str = await self._get_access_token()
+        url: str = f"{WECOM_API_BASE}/message/send?access_token={token}"
+        body: dict[str, Any] = message.to_api_dict()
 
-        client = self._get_http_client()
+        client: httpx.AsyncClient = self._get_http_client()
         try:
-            response = await client.post(url, json=body)
+            response: Any = await client.post(url, json=body)
             response.raise_for_status()
-            data = response.json()
+            data: Any = response.json()
         except httpx.HTTPError as exc:
             logger.error(
                 "Failed to send WeChat Work message",
@@ -203,7 +203,7 @@ class WecomPusher:
         Returns:
             企业微信 API 响应字典。
         """
-        message = WecomAppMessage(
+        message: WecomAppMessage = WecomAppMessage(
             msgtype=WecomMessageType.TEXT,
             agentid=self._agent_id,
             touser=user_id,
@@ -230,7 +230,7 @@ class WecomPusher:
         Returns:
             企业微信 API 响应字典。
         """
-        message = WecomAppMessage(
+        message: WecomAppMessage = WecomAppMessage(
             msgtype=WecomMessageType.MARKDOWN,
             agentid=self._agent_id,
             touser=user_id,
@@ -271,7 +271,7 @@ class WecomPusher:
         if pic_url:
             article["picurl"] = pic_url
 
-        message = WecomAppMessage(
+        message: WecomAppMessage = WecomAppMessage(
             msgtype=WecomMessageType.NEWS,
             agentid=self._agent_id,
             touser=user_id,
@@ -339,7 +339,7 @@ class WecomPusher:
                 "aspect_ratio": "1.0",
             }
 
-        message = WecomAppMessage(
+        message: WecomAppMessage = WecomAppMessage(
             msgtype=WecomMessageType.BUTTON_INTERACTION,
             agentid=self._agent_id,
             touser=user_id,

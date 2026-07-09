@@ -10,9 +10,9 @@ WeComOrgSync — 企业微信组织架构的定时同步。
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime, timezone
-from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -49,8 +49,8 @@ class WeComOrgSync:
             包含 ``departments_synced`` 和 ``users_synced`` 计数的字典。
         """
         logger.info("Starting WeCom org sync")
-        dept_count = await self.sync_departments(session)
-        user_count = await self.sync_users(session)
+        dept_count: int = await self.sync_departments(session)
+        user_count: int = await self.sync_users(session)
         await session.commit()
         self._last_sync_at = datetime.now(timezone.utc)
         logger.info(
@@ -63,32 +63,32 @@ class WeComOrgSync:
     async def sync_departments(self, session: AsyncSession) -> int:
         """从企业微信拉取部门并 upsert 到数据库。"""
         try:
-            depts = await self._wecom.get_department_list()
+            depts: list[dict[str, Any]] = await self._wecom.get_department_list()
         except Exception:
             logger.exception("Failed to fetch departments from WeCom")
             return 0
 
-        count = 0
+        count: int = 0
         for dept_data in depts:
-            dept_id = str(dept_data.get("id", ""))
+            dept_id: str = str(dept_data.get("id", ""))
             if not dept_id:
                 continue
 
             # 检查部门是否存在
-            stmt = select(DepartmentModel).where(
+            stmt: Any = select(DepartmentModel).where(
                 DepartmentModel.dept_id == dept_id,
                 DepartmentModel.deleted_at.is_(None),
             )
-            result = await session.execute(stmt)
-            existing = result.scalar_one_or_none()
+            result: ToolResult = await session.execute(stmt)
+            existing: Any = result.scalar_one_or_none()
 
             if existing:
                 existing.name = dept_data.get("name", existing.name)
-                parent_id = dept_data.get("parentid")
+                parent_id: Skill | None = dept_data.get("parentid")
                 if parent_id is not None:
                     existing.parent_id = str(parent_id)
             else:
-                new_dept = DepartmentModel(
+                new_dept: DepartmentModel = DepartmentModel(
                     dept_id=dept_id,
                     name=dept_data.get("name", ""),
                     parent_id=str(dept_data.get("parentid", "")) or None,
@@ -104,23 +104,23 @@ class WeComOrgSync:
         遍历所有已同步的部门，获取每个部门的用户。
         """
         # 获取所有部门
-        stmt = select(DepartmentModel).where(
+        stmt: Any = select(DepartmentModel).where(
             DepartmentModel.deleted_at.is_(None),
             DepartmentModel.is_active.is_(True),
         )
-        result = await session.execute(stmt)
-        departments = result.scalars().all()
+        result: ToolResult = await session.execute(stmt)
+        departments: Any = result.scalars().all()
 
-        count = 0
+        count: int = 0
         seen_userids: set[str] = set()
 
         for dept in departments:
             try:
                 # 企业微信部门 ID 是整数
-                dept_id_int = int(dept.dept_id) if dept.dept_id.isdigit() else 0
+                dept_id_int: int = int(dept.dept_id) if dept.dept_id.isdigit() else 0
                 if dept_id_int == 0:
                     continue
-                users = await self._wecom.get_department_users(dept_id_int)
+                users: list[dict[str, Any]] = await self._wecom.get_department_users(dept_id_int)
             except Exception:
                 logger.warning(
                     "Failed to fetch users for department",
@@ -129,7 +129,7 @@ class WeComOrgSync:
                 continue
 
             for user_data in users:
-                wecom_user_id = user_data.get("userid", "")
+                wecom_user_id: Skill | None = user_data.get("userid", "")
                 if not wecom_user_id or wecom_user_id in seen_userids:
                     continue
                 seen_userids.add(wecom_user_id)
@@ -146,18 +146,18 @@ class WeComOrgSync:
         dept_id: str,
     ) -> None:
         """从企业微信数据中插入或更新单个用户。"""
-        wecom_user_id = user_data.get("userid", "")
+        wecom_user_id: Skill | None = user_data.get("userid", "")
 
-        stmt = select(UserModel).where(
+        stmt: Any = select(UserModel).where(
             UserModel.wecom_user_id == wecom_user_id,
             UserModel.deleted_at.is_(None),
         )
-        result = await session.execute(stmt)
-        existing = result.scalar_one_or_none()
+        result: ToolResult = await session.execute(stmt)
+        existing: Any = result.scalar_one_or_none()
 
-        name = user_data.get("name", wecom_user_id)
-        email = user_data.get("email") or user_data.get("biz_mail")
-        phone = user_data.get("mobile") or user_data.get("telephone")
+        name: Skill | None = user_data.get("name", wecom_user_id)
+        email: Any = user_data.get("email") or user_data.get("biz_mail")
+        phone: Any = user_data.get("mobile") or user_data.get("telephone")
 
         if existing:
             existing.display_name = name
@@ -169,7 +169,7 @@ class WeComOrgSync:
             existing.dept_id = dept_id
             existing.is_active = user_data.get("status", 1) == 1
         else:
-            new_user = UserModel(
+            new_user: UserModel = UserModel(
                 user_id=f"wecom_{wecom_user_id}",
                 username=wecom_user_id,
                 display_name=name,

@@ -14,9 +14,9 @@ Skill CRUD API 路由。
 """
 
 from __future__ import annotations
+from typing import Any
 
 import uuid
-from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query, status
@@ -67,28 +67,28 @@ async def list_skills(
     if _registry is None:
         return _api_response(9001, None, "SkillRegistry not initialized")
 
-    skills = _registry.list_all()
+    skills: list[Skill] = _registry.list_all()
 
     # 筛选
     if category:
-        skills = [s for s in skills if s.category == category]
+        skills: list[Any] = [s for s in skills if s.category == category]
     if status_filter:
-        skills = [s for s in skills if s.status == status_filter]
+        skills: list[Any] = [s for s in skills if s.status == status_filter]
     if source:
-        skills = [s for s in skills if s.source == source]
+        skills: list[Any] = [s for s in skills if s.source == source]
     if keyword:
-        kw_lower = keyword.lower()
-        skills = [
+        kw_lower: str = keyword.lower()
+        skills: list[Any] = [
             s for s in skills
             if kw_lower in s.name.lower() or kw_lower in s.description.lower()
         ]
 
-    total = len(skills)
-    start = (page - 1) * page_size
-    end = start + page_size
-    items = skills[start:end]
+    total: Any = len(skills)
+    start: Any = (page - 1) * page_size
+    end: Any = start + page_size
+    items: Any = skills[start:end]
 
-    response = SkillListResponse(
+    response: SkillListResponse = SkillListResponse(
         items=items,
         total=total,
         page=page,
@@ -110,7 +110,7 @@ async def get_skill(skill_id: str) -> dict[str, Any]:
     """按 ID 获取单个 Skill。"""
     if _registry is None:
         return _api_response(9001, None, "SkillRegistry not initialized")
-    skill = _registry.get(skill_id)
+    skill: Skill | None = _registry.get(skill_id)
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -125,11 +125,11 @@ async def create_skill(req: SkillCreateRequest) -> dict[str, Any]:
     if _registry is None:
         return _api_response(9001, None, "SkillRegistry not initialized")
 
-    existing = _registry.get(req.skill_id)
+    existing: Skill | None = _registry.get(req.skill_id)
     if existing:
         return _api_response(3001, None, f"Skill '{req.skill_id}' already exists")
 
-    skill = Skill(
+    skill: Skill = Skill(
         skill_id=req.skill_id,
         name=req.name,
         description=req.description,
@@ -158,14 +158,14 @@ async def update_skill(
     if _registry is None:
         return _api_response(9001, None, "SkillRegistry not initialized")
 
-    skill = _registry.get(skill_id)
+    skill: Skill | None = _registry.get(skill_id)
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Skill '{skill_id}' not found",
         )
 
-    update_data = req.model_dump(exclude_unset=True)
+    update_data: dict[str, Any] = req.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         if value is not None:
             setattr(skill, key, value)
@@ -196,7 +196,7 @@ async def enable_skill(skill_id: str) -> dict[str, Any]:
     if _registry is None:
         return _api_response(9001, None, "SkillRegistry not initialized")
 
-    skill = _registry.get(skill_id)
+    skill: Skill | None = _registry.get(skill_id)
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -214,7 +214,7 @@ async def disable_skill(skill_id: str) -> dict[str, Any]:
     if _registry is None:
         return _api_response(9001, None, "SkillRegistry not initialized")
 
-    skill = _registry.get(skill_id)
+    skill: Skill | None = _registry.get(skill_id)
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -232,5 +232,5 @@ async def reindex_skills() -> dict[str, Any]:
     if _registry is None:
         return _api_response(9001, None, "SkillRegistry not initialized")
 
-    count = await _registry.reindex_all()
+    count: int = await _registry.reindex_all()
     return _api_response(0, {"indexed": count}, "Reindex complete")

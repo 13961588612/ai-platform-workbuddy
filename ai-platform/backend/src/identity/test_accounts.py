@@ -1,6 +1,7 @@
 """开发环境测试账号加载与校验。"""
 
 from __future__ import annotations
+from typing import Any
 
 from pathlib import Path
 
@@ -36,20 +37,20 @@ class TestAccountStore:
     def _reload(self) -> None:
         """从配置路径重新加载测试账号 YAML 到内存索引。"""
         self._by_username.clear()
-        settings = get_settings()
+        settings: Settings = get_settings()
         if not settings.DEV_TEST_ACCOUNTS_ENABLED:
             return
 
-        path = Path(settings.TEST_ACCOUNTS_FILE)
+        path: Path = Path(settings.TEST_ACCOUNTS_FILE)
         if not path.is_absolute():
-            path = Path(settings.CONFIG_BASE_PATH) / path
+            path: Any = Path(settings.CONFIG_BASE_PATH) / path
 
         if not path.is_file():
             logger.warning("Test accounts file not found", path=str(path))
             return
 
         try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            data: Any = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except (OSError, yaml.YAMLError) as exc:
             logger.error("Failed to load test accounts", path=str(path), error=str(exc))
             return
@@ -58,7 +59,7 @@ class TestAccountStore:
             if not isinstance(item, dict):
                 continue
             try:
-                account = TestAccount.model_validate(item)
+                account: Any = TestAccount.model_validate(item)
             except Exception as exc:
                 logger.warning("Skip invalid test account entry", error=str(exc))
                 continue
@@ -87,7 +88,7 @@ class TestAccountStore:
         """
         if not get_settings().DEV_TEST_ACCOUNTS_ENABLED:
             return None
-        account = self._by_username.get(username)
+        account: Skill | None = self._by_username.get(username)
         if account is None or account.password != password:
             return None
         return account

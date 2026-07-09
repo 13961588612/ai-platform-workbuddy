@@ -14,9 +14,9 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
@@ -64,7 +64,7 @@ async def system_health(
 ) -> dict[str, Any]:
     """获取所有子系统的整体健康概览。"""
     try:
-        llm_status = llm_gateway.get_status()
+        llm_status: dict[str, Any] = llm_gateway.get_status()
         return success(
             data={
                 "llm_gateway": {
@@ -95,7 +95,7 @@ async def get_route_logs(
 ) -> dict[str, Any]:
     """按条件筛选查询路由决策日志。"""
     try:
-        filter_obj = RouteLogFilter(
+        filter_obj: RouteLogFilter = RouteLogFilter(
             session_id=session_id,
             user_id=user_id,
             agent_id=agent_id,
@@ -103,7 +103,7 @@ async def get_route_logs(
             limit=limit,
             offset=offset,
         )
-        logs = await route_logger.query_logs(filter_obj)
+        logs: list[RouteLog] = await route_logger.query_logs(filter_obj)
         return success(
             data=[log.model_dump() for log in logs],
             message=f"Found {len(logs)} route logs",
@@ -119,7 +119,7 @@ async def get_route_stats(
 ) -> dict[str, Any]:
     """获取仪表板所用的聚合路由统计数据。"""
     try:
-        stats = await route_logger.get_stats()
+        stats: RouteStats = await route_logger.get_stats()
         return success(data=stats.model_dump())
     except Exception as exc:
         logger.error("Failed to get route stats", error=str(exc))
@@ -132,7 +132,7 @@ async def get_llm_status(
 ) -> dict[str, Any]:
     """获取当前 LLM 网关状态，包括故障转移和代理信息。"""
     try:
-        status_info = llm_gateway.get_status()
+        status_info: dict[str, Any] = llm_gateway.get_status()
         return success(data=status_info)
     except Exception as exc:
         logger.error("Failed to get LLM status", error=str(exc))
@@ -152,8 +152,8 @@ async def get_token_usage(
     try:
         from src.llm.token_tracker import get_token_tracker
 
-        tracker = get_token_tracker()
-        records = await tracker.query_usage(
+        tracker: TokenTracker = get_token_tracker()
+        records: list[dict[str, Any]] = await tracker.query_usage(
             user_id=user_id,
             dept=department,
             model=model,
@@ -175,8 +175,8 @@ async def get_token_summary(
     try:
         from src.llm.token_tracker import get_token_tracker
 
-        tracker = get_token_tracker()
-        summary = await tracker.get_summary(user_id=user_id, dept=department)
+        tracker: TokenTracker = get_token_tracker()
+        summary: dict[str, Any] = await tracker.get_summary(user_id=user_id, dept=department)
         return success(data=summary)
     except Exception as exc:
         logger.error("Failed to get token summary", error=str(exc))
@@ -190,8 +190,8 @@ async def get_user_quota(
 ) -> dict[str, Any]:
     """获取用户的当前 token 配额信息。"""
     try:
-        quota_manager = get_quota_manager()
-        info = await quota_manager.get_quota_info(user_id, department)
+        quota_manager: QuotaManager = get_quota_manager()
+        info: QuotaInfo = await quota_manager.get_quota_info(user_id, department)
         return success(data=info.model_dump())
     except Exception as exc:
         logger.error("Failed to get quota info", error=str(exc))
@@ -204,7 +204,7 @@ async def reset_user_quota(
 ) -> dict[str, Any]:
     """重置用户的每日 token 配额（管理员覆盖）。"""
     try:
-        quota_manager = get_quota_manager()
+        quota_manager: QuotaManager = get_quota_manager()
         await quota_manager.reset_quota(user_id)
         return success(message=f"Quota reset for user {user_id}")
     except Exception as exc:
@@ -218,7 +218,7 @@ async def get_proxy_status(
 ) -> dict[str, Any]:
     """获取出站代理池状态。"""
     try:
-        status_info = llm_gateway.get_status()
+        status_info: dict[str, Any] = llm_gateway.get_status()
         return success(data=status_info.get("proxy_pool", []))
     except Exception as exc:
         logger.error("Failed to get proxy status", error=str(exc))
@@ -231,7 +231,7 @@ async def reset_failover() -> dict[str, Any]:
     try:
         from src.llm.failover import get_failover_manager
 
-        manager = get_failover_manager()
+        manager: FailoverManager = get_failover_manager()
         manager.reset()
         return success(
             data={"active_provider": manager.active_provider},
@@ -248,7 +248,7 @@ async def list_configs(
 ) -> dict[str, Any]:
     """列出所有 Agent 配置。"""
     try:
-        configs = config_manager.list_configs()
+        configs: dict[str, Any] = config_manager.list_configs()
         return success(
             data=[
                 {

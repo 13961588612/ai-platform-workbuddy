@@ -7,11 +7,11 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 import redis.asyncio as aioredis
 
@@ -64,7 +64,7 @@ class Message:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Message:
         """从字典反序列化消息。"""
-        msg = cls(
+        msg: Any = cls(
             role=data["role"],
             content=data["content"],
             metadata=data.get("metadata", {}),
@@ -107,7 +107,7 @@ class Session:
 
     def add_message(self, role: str, content: str, metadata: dict[str, Any] | None = None) -> Message:
         """向会话中添加一条消息。"""
-        msg = Message(role=role, content=content, metadata=metadata)
+        msg: Message = Message(role=role, content=content, metadata=metadata)
         self.messages.append(msg)
         self.updated_at = datetime.now(timezone.utc)
         return msg
@@ -176,10 +176,10 @@ class SessionManager:
         会话 ID 格式：{channel_prefix}{uuid}
         示例：web-{uuid}、wecom-h5-{uuid}、wecom-bot-{uuid}
         """
-        prefix = CHANNEL_PREFIXES.get(channel, f"{channel}-")
-        session_id = f"{prefix}{uuid.uuid4()}"
+        prefix: Skill | None = CHANNEL_PREFIXES.get(channel, f"{channel}-")
+        session_id: str = f"{prefix}{uuid.uuid4()}"
 
-        session = Session(
+        session: Session = Session(
             session_id=session_id,
             agent_id=agent_id,
             user_id=user_id,
@@ -188,7 +188,7 @@ class SessionManager:
         )
 
         # 存储到 Redis
-        redis = await self._get_redis()
+        redis: aioredis.Redis = await self._get_redis()
         await redis.setex(
             self._session_key(session_id),
             self._session_ttl,
@@ -213,14 +213,14 @@ class SessionManager:
 
     async def get_session(self, session_id: str) -> Session:
         """按 ID 从 Redis 中获取会话。"""
-        redis = await self._get_redis()
-        data = await redis.get(self._session_key(session_id))
+        redis: aioredis.Redis = await self._get_redis()
+        data: Skill | None = await redis.get(self._session_key(session_id))
 
         if data is None:
             raise SessionNotFoundError(session_id)
 
-        session_data = json.loads(data)
-        session = Session(
+        session_data: Any = json.loads(data)
+        session: Session = Session(
             session_id=session_data["session_id"],
             agent_id=session_data["agent_id"],
             user_id=session_data["user_id"],
@@ -237,7 +237,7 @@ class SessionManager:
 
     async def save_session(self, session: Session) -> None:
         """将会话持久化到 Redis。"""
-        redis = await self._get_redis()
+        redis: aioredis.Redis = await self._get_redis()
         session.updated_at = datetime.now(timezone.utc)
         await redis.setex(
             self._session_key(session.session_id),
@@ -247,12 +247,12 @@ class SessionManager:
 
     async def get_agent_binding(self, session_id: str) -> str | None:
         """获取会话绑定的 agent ID（用于会话亲和路由）。"""
-        redis = await self._get_redis()
+        redis: aioredis.Redis = await self._get_redis()
         return await redis.get(self._agent_binding_key(session_id))
 
     async def set_agent_binding(self, session_id: str, agent_id: str) -> None:
         """将会话绑定到一个 agent（用于会话亲和路由）。"""
-        redis = await self._get_redis()
+        redis: aioredis.Redis = await self._get_redis()
         await redis.setex(
             self._agent_binding_key(session_id),
             self._session_ttl,
@@ -261,7 +261,7 @@ class SessionManager:
 
     async def close_session(self, session_id: str) -> None:
         """关闭一个会话（从 Redis 中移除）。"""
-        redis = await self._get_redis()
+        redis: aioredis.Redis = await self._get_redis()
         await redis.delete(self._session_key(session_id))
         await redis.delete(self._agent_binding_key(session_id))
         logger.info("Session closed", session_id=session_id)
@@ -274,8 +274,8 @@ class SessionManager:
         metadata: dict[str, Any] | None = None,
     ) -> Message:
         """向现有会话添加一条消息并持久化。"""
-        session = await self.get_session(session_id)
-        msg = session.add_message(role, content, metadata)
+        session: dict[str, Any] = await self.get_session(session_id)
+        msg: Message = session.add_message(role, content, metadata)
         await self.save_session(session)
         return msg
 

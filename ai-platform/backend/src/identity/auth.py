@@ -14,8 +14,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 import bcrypt
 import httpx
@@ -59,12 +59,12 @@ class WeComClient:
         if self._cached_access_token and time.time() < self._token_expires_at - 300:
             return self._cached_access_token
 
-        url = f"{self._base_url}/gettoken"
-        params = {"corpid": self._corp_id, "corpsecret": self._secret}
+        url: str = f"{self._base_url}/gettoken"
+        params: dict[str, Any] = {"corpid": self._corp_id, "corpsecret": self._secret}
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, params=params)
+            resp: Skill | None = await client.get(url, params=params)
             resp.raise_for_status()
-            data = resp.json()
+            data: Any = resp.json()
 
         if data.get("errcode", 0) != 0:
             raise AuthenticationError(
@@ -77,33 +77,33 @@ class WeComClient:
 
     async def code_to_userid(self, code: str) -> str:
         """将 OAuth2 *code* 兑换为企业微信 userid。"""
-        access_token = await self.get_access_token()
-        url = f"{self._base_url}/auth/getuserinfo"
-        params = {"access_token": access_token, "code": code}
+        access_token: str = await self.get_access_token()
+        url: str = f"{self._base_url}/auth/getuserinfo"
+        params: dict[str, Any] = {"access_token": access_token, "code": code}
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, params=params)
+            resp: Skill | None = await client.get(url, params=params)
             resp.raise_for_status()
-            data = resp.json()
+            data: Any = resp.json()
 
         if data.get("errcode", 0) != 0:
             raise AuthenticationError(
                 f"WeCom getuserinfo failed: {data.get('errmsg', 'unknown')}"
             )
 
-        userid = data.get("userid") or data.get("UserId")
+        userid: Any = data.get("userid") or data.get("UserId")
         if not userid:
             raise AuthenticationError("WeCom did not return a userid")
         return userid
 
     async def get_user_info(self, userid: str) -> dict[str, Any]:
         """从企业微信获取详细的用户信息。"""
-        access_token = await self.get_access_token()
-        url = f"{self._base_url}/user/get"
-        params = {"access_token": access_token, "userid": userid}
+        access_token: str = await self.get_access_token()
+        url: str = f"{self._base_url}/user/get"
+        params: dict[str, Any] = {"access_token": access_token, "userid": userid}
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, params=params)
+            resp: Skill | None = await client.get(url, params=params)
             resp.raise_for_status()
-            data = resp.json()
+            data: Any = resp.json()
         if data.get("errcode", 0) != 0:
             logger.warning("WeCom get_user_info failed", userid=userid, error=data.get("errmsg"))
             return {}
@@ -111,26 +111,26 @@ class WeComClient:
 
     async def get_department_list(self) -> list[dict[str, Any]]:
         """从企业微信获取所有部门列表。"""
-        access_token = await self.get_access_token()
-        url = f"{self._base_url}/department/list"
-        params = {"access_token": access_token}
+        access_token: str = await self.get_access_token()
+        url: str = f"{self._base_url}/department/list"
+        params: dict[str, Any] = {"access_token": access_token}
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, params=params)
+            resp: Skill | None = await client.get(url, params=params)
             resp.raise_for_status()
-            data = resp.json()
+            data: Any = resp.json()
         if data.get("errcode", 0) != 0:
             return []
         return data.get("department", [])
 
     async def get_department_users(self, dept_id: int) -> list[dict[str, Any]]:
         """获取企业微信部门中的所有用户。"""
-        access_token = await self.get_access_token()
-        url = f"{self._base_url}/user/list"
-        params = {"access_token": access_token, "department_id": dept_id, "fetch_child": 0}
+        access_token: str = await self.get_access_token()
+        url: str = f"{self._base_url}/user/list"
+        params: dict[str, Any] = {"access_token": access_token, "department_id": dept_id, "fetch_child": 0}
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, params=params)
+            resp: Skill | None = await client.get(url, params=params)
             resp.raise_for_status()
-            data = resp.json()
+            data: Any = resp.json()
         if data.get("errcode", 0) != 0:
             return []
         return data.get("userlist", [])
@@ -170,19 +170,19 @@ class AuthService:
             包含 access token 和 refresh token 的 :class:`TokenSet`。
         """
         # 1. 用 code 兑换 userid
-        wecom_user_id = await self._wecom.code_to_userid(request.code)
+        wecom_user_id: str = await self._wecom.code_to_userid(request.code)
         logger.info("WeCom OAuth2 code verified", wecom_user_id=wecom_user_id)
 
         # 2. 查找本地用户
         if user_lookup:
-            user_ctx = await user_lookup(wecom_user_id)
+            user_ctx: Any = await user_lookup(wecom_user_id)
             if user_ctx is None:
                 raise AuthenticationError(
                     f"User not found in local database: wecom_user_id={wecom_user_id}"
                 )
         else:
             # 回退：创建最小上下文
-            user_ctx = UserContext(
+            user_ctx: UserContext = UserContext(
                 user_id=wecom_user_id,
                 username=wecom_user_id,
                 display_name=wecom_user_id,
@@ -216,10 +216,12 @@ class AuthService:
         if user_lookup is None:
             raise AuthenticationError("No user_lookup provided for password login")
 
-        result = await user_lookup(request.username)
+        result: Any = await user_lookup(request.username)
         if result is None:
             raise AuthenticationError("Invalid username or password")
 
+        user_ctx: UserContext
+        password_hash: str
         user_ctx, password_hash = result
 
         # 验证密码

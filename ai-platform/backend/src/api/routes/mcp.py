@@ -14,9 +14,9 @@ MCP Server 管理 API 路由。
 """
 
 from __future__ import annotations
+from typing import Any
 
 import uuid
-from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, status
@@ -90,7 +90,7 @@ async def list_servers() -> dict[str, Any]:
     """列出所有已注册的 MCP Server。"""
     if _manager is None:
         return _api_response(9001, None, "MCPManager not initialized")
-    servers = [s.model_dump(mode="json") for s in _manager.list_servers()]
+    servers: list[dict[str, Any]] = [s.model_dump(mode="json") for s in _manager.list_servers()]
     return _api_response(0, servers, "OK")
 
 
@@ -100,7 +100,7 @@ async def register_server(req: RegisterServerRequest) -> dict[str, Any]:
     if _manager is None:
         return _api_response(9001, None, "MCPManager not initialized")
 
-    config = MCPServerConfig(
+    config: MCPServerConfig = MCPServerConfig(
         name=req.name,
         transport=req.transport,
         endpoint=req.endpoint,
@@ -119,7 +119,7 @@ async def health_check_all() -> dict[str, Any]:
     """对所有已连接的 MCP Server 进行健康检查。"""
     if _manager is None:
         return _api_response(9001, None, "MCPManager not initialized")
-    results = await _manager.health_check_all()
+    results: dict[str, Any] = await _manager.health_check_all()
     return _api_response(0, results, "OK")
 
 
@@ -128,7 +128,7 @@ async def get_server(name: str) -> dict[str, Any]:
     """获取指定 MCP Server 的配置。"""
     if _manager is None:
         return _api_response(9001, None, "MCPManager not initialized")
-    config = _manager.get_server_config(name)
+    config: MCPServerConfig | None = _manager.get_server_config(name)
     if not config:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -164,7 +164,7 @@ async def list_tools(name: str) -> dict[str, Any]:
     if _manager is None:
         return _api_response(9001, None, "MCPManager not initialized")
     try:
-        tools = await _manager.discover_tools(name)
+        tools: list[dict[str, Any]] = await _manager.discover_tools(name)
         return _api_response(0, tools, "OK")
     except MCPClientError as exc:
         return _api_response(4002, None, str(exc))
@@ -176,7 +176,7 @@ async def call_tool(name: str, req: CallToolRequest) -> dict[str, Any]:
     if _manager is None:
         return _api_response(9001, None, "MCPManager not initialized")
     try:
-        result = await _manager.call_tool(name, req.tool_name, req.arguments)
+        result: dict[str, Any] = await _manager.call_tool(name, req.tool_name, req.arguments)
         return _api_response(0, result, "OK")
     except MCPClientError as exc:
         return _api_response(4003, None, str(exc))
@@ -188,7 +188,7 @@ async def discover_and_register(name: str) -> dict[str, Any]:
     if _discovery is None:
         return _api_response(9001, None, "MCPDiscovery not initialized")
     try:
-        skills = await _discovery.discover_and_register(name)
+        skills: dict[str, Any] = await _discovery.discover_and_register(name)
         return _api_response(
             0,
             {"discovered": len(skills), "skill_ids": [s.skill_id for s in skills]},

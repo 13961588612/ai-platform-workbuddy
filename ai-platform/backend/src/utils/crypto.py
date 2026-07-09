@@ -7,10 +7,10 @@ AES-256-GCM 加密/解密工具。
 """
 
 from __future__ import annotations
+from typing import Any
 
 import base64
 import os
-from typing import Any
 
 import structlog
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -35,7 +35,7 @@ def _get_key() -> bytes:
     """
     import hashlib
 
-    raw = get_settings().CREDENTIAL_VAULT_KEY.encode("utf-8")
+    raw: bytes = get_settings().CREDENTIAL_VAULT_KEY.encode("utf-8")
     return hashlib.sha256(raw).digest()  # 始终 32 字节
 
 
@@ -46,35 +46,35 @@ def encrypt(plaintext: str | bytes) -> str:
     无需单独存储。
     """
     if isinstance(plaintext, str):
-        plaintext_bytes = plaintext.encode("utf-8")
+        plaintext_bytes: bytes = plaintext.encode("utf-8")
     else:
-        plaintext_bytes = plaintext
+        plaintext_bytes: Any = plaintext
 
-    key = _get_key()
-    nonce = os.urandom(_NONCE_SIZE)
-    aesgcm = AESGCM(key)
-    ciphertext = aesgcm.encrypt(nonce, plaintext_bytes, associated_data=None)
-    blob = nonce + ciphertext
+    key: bytes = _get_key()
+    nonce: Any = os.urandom(_NONCE_SIZE)
+    aesgcm: AESGCM = AESGCM(key)
+    ciphertext: str = aesgcm.encrypt(nonce, plaintext_bytes, associated_data=None)
+    blob: Any = nonce + ciphertext
     return base64.urlsafe_b64encode(blob).decode("ascii")
 
 
 def decrypt(token: str) -> str:
     """解密由 :func:`encrypt` 生成的 token 并返回原始 UTF-8 字符串。"""
     try:
-        blob = base64.urlsafe_b64decode(token.encode("ascii"))
+        blob: Any = base64.urlsafe_b64decode(token.encode("ascii"))
     except Exception as exc:
         raise CryptoError("Invalid base64 token") from exc
 
     if len(blob) < _NONCE_SIZE + 16:  # nonce + 最小 GCM tag（16 字节）
         raise CryptoError("Token too short to contain nonce and tag")
 
-    nonce = blob[:_NONCE_SIZE]
-    ciphertext = blob[_NONCE_SIZE:]
+    nonce: Any = blob[:_NONCE_SIZE]
+    ciphertext: Any = blob[_NONCE_SIZE:]
 
-    key = _get_key()
-    aesgcm = AESGCM(key)
+    key: bytes = _get_key()
+    aesgcm: AESGCM = AESGCM(key)
     try:
-        plaintext_bytes = aesgcm.decrypt(nonce, ciphertext, associated_data=None)
+        plaintext_bytes: str = aesgcm.decrypt(nonce, ciphertext, associated_data=None)
     except Exception as exc:
         raise CryptoError("Decryption failed — key mismatch or corrupted data") from exc
 

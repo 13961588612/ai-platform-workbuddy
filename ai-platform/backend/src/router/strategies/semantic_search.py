@@ -6,8 +6,8 @@ Qdrant agent_router_index 集合以找到最相似的 Agent。
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 import httpx
 from qdrant_client import QdrantClient
@@ -67,7 +67,7 @@ class SemanticSearchStrategy(RoutingStrategy):
     ) -> RouteResult | None:
         """嵌入用户输入并搜索 Qdrant 以查找匹配的 Agent。"""
         try:
-            scores = await self.embed_and_search(request.text, self._top_k)
+            scores: list[AgentScore] = await self.embed_and_search(request.text, self._top_k)
         except Exception as exc:
             logger.error("Semantic search failed", error=str(exc))
             return None
@@ -75,7 +75,7 @@ class SemanticSearchStrategy(RoutingStrategy):
         if not scores:
             return None
 
-        top_score = scores[0]
+        top_score: Any = scores[0]
 
         if top_score.score < SEMANTIC_MATCH_THRESHOLD:
             logger.info(
@@ -87,7 +87,7 @@ class SemanticSearchStrategy(RoutingStrategy):
             return None
 
         # 验证匹配的 Agent 是否在候选列表中
-        matched = next(
+        matched: Any = next(
             (c for c in candidates if c.agent_id == top_score.agent_id and c.routing.enabled),
             None,
         )
@@ -133,17 +133,17 @@ class SemanticSearchStrategy(RoutingStrategy):
         """
         # 第 1 步：通过本地嵌入服务生成嵌入向量
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
+            response: Any = await client.post(
                 f"{self._embedding_url}/embed",
                 json={"texts": [text], "batch_size": 1},
             )
             response.raise_for_status()
-            data = response.json()
+            data: Any = response.json()
             embedding: list[float] = data["embeddings"][0]
 
         # 第 2 步：搜索 Qdrant
-        qdrant = self._get_qdrant()
-        search_results = qdrant.search(
+        qdrant: QdrantClient = self._get_qdrant()
+        search_results: list[dict] = qdrant.search(
             collection_name=self._collection,
             query_vector=embedding,
             limit=top_k,
@@ -154,7 +154,7 @@ class SemanticSearchStrategy(RoutingStrategy):
         # 第 3 步：转换为 AgentScore 列表
         scores: list[AgentScore] = []
         for result in search_results:
-            payload = result.payload or {}
+            payload: Any = result.payload or {}
             scores.append(
                 AgentScore(
                     agent_id=payload.get("agent_id", ""),

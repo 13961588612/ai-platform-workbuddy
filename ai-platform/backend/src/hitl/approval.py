@@ -13,9 +13,9 @@ Manager 协调以下组件：
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime, timezone
-from typing import Any
 
 from src.config import get_settings
 from src.hitl.store import ApprovalRecord, ApprovalStatus, ApprovalStore
@@ -56,7 +56,7 @@ class ApprovalManager:
 
     def __init__(self) -> None:
         """初始化 ApprovalManager。"""
-        settings = get_settings()
+        settings: Settings = get_settings()
         self._store: ApprovalStore = ApprovalStore()
         self._wecom_pusher: WecomPusher = get_wecom_pusher()
         self._default_timeout: int = settings.HITL_APPROVAL_TIMEOUT_SECONDS
@@ -93,7 +93,7 @@ class ApprovalManager:
             RuntimeError：如果用户待审批数量过多。
         """
         # 检查每个用户的最大待审批数量
-        pending = await self._store.list_by_user(user_id, ApprovalStatus.PENDING)
+        pending: list[ApprovalRecord] = await self._store.list_by_user(user_id, ApprovalStatus.PENDING)
         if len(pending) >= self._max_pending_per_user:
             logger.warning(
                 "User has too many pending approvals",
@@ -106,9 +106,9 @@ class ApprovalManager:
                 f"(max: {self._max_pending_per_user})"
             )
 
-        timeout = timeout_seconds or self._default_timeout
+        timeout: Any = timeout_seconds or self._default_timeout
 
-        record = await self._store.create(
+        record: AgentRuntime = await self._store.create(
             session_id=session_id,
             agent_id=agent_id,
             skill_id=skill_id,
@@ -171,7 +171,7 @@ class ApprovalManager:
                 f"Invalid decision: {decision}. Must be 'approved' or 'rejected'."
             )
 
-        record = await self._store.get(approval_id)
+        record: Skill | None = await self._store.get(approval_id)
         if not record:
             return None
 
@@ -189,11 +189,11 @@ class ApprovalManager:
             )
             return record
 
-        status = (
+        status: Any = (
             ApprovalStatus.APPROVED if decision == "approved" else ApprovalStatus.REJECTED
         )
 
-        updated = await self._store.update_status(approval_id, status, comment)
+        updated: ApprovalRecord | None = await self._store.update_status(approval_id, status, comment)
         if not updated:
             return None
 
@@ -222,7 +222,7 @@ class ApprovalManager:
         返回：
             被标记为超时的审批数量。
         """
-        timed_out = await self._store.cleanup_expired()
+        timed_out: int = await self._store.cleanup_expired()
         if timed_out > 0:
             logger.info("Approval timeout check completed", timed_out=timed_out)
         return timed_out
@@ -257,8 +257,8 @@ class ApprovalManager:
         使用 WecomPusher 发送带批准/拒绝按钮的 button_interaction 模板卡片。
         这与 Gateway 的 BotEventMapper approval_card 映射保持一致。
         """
-        title = record.detail.get("title", "审批请求")
-        description = record.detail.get("description", "请审批此操作")
+        title: Skill | None = record.detail.get("title", "审批请求")
+        description: Skill | None = record.detail.get("description", "请审批此操作")
 
         await self._wecom_pusher.send_approval_notification(
             user_id=record.user_id,

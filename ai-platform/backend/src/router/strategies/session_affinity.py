@@ -5,8 +5,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 import redis.asyncio as aioredis
 
@@ -57,15 +57,15 @@ class SessionAffinityStrategy(RoutingStrategy):
         session_ctx: SessionContext,
     ) -> RouteResult | None:
         """检查现有的会话→Agent 绑定。"""
-        redis = await self._get_redis()
-        binding_key = f"session:{request.session_id}:agent_binding"
-        bound_agent_id = await redis.get(binding_key)
+        redis: aioredis.Redis = await self._get_redis()
+        binding_key: str = f"session:{request.session_id}:agent_binding"
+        bound_agent_id: Skill | None = await redis.get(binding_key)
 
         if bound_agent_id is None:
             return None
 
         # 验证绑定的 Agent 是否仍然启用
-        bound_agent = next(
+        bound_agent: Any = next(
             (c for c in candidates if c.agent_id == bound_agent_id and c.routing.enabled),
             None,
         )

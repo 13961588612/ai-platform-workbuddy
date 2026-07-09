@@ -11,9 +11,9 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 import time
-from typing import Any
 
 from src.agent.config import AgentConfig
 from src.agent.session import get_session_manager
@@ -98,17 +98,17 @@ class AgentRouter:
         Raises:
             此方法始终返回 RouteResult，因为 DefaultFallbackStrategy 始终匹配。
         """
-        start_time = time.monotonic()
+        start_time: Any = time.monotonic()
 
         # 构建会话上下文
-        session_ctx = SessionContext(
+        session_ctx: SessionContext = SessionContext(
             session_id=request.session_id,
             user_id=request.user_id,
             channel=request.channel,
         )
 
         # Try existing session binding first (also captured by strategy 1)
-        existing_binding = await self._session_manager.get_agent_binding(
+        existing_binding: str | None = await self._session_manager.get_agent_binding(
             request.session_id
         )
         if existing_binding:
@@ -121,7 +121,7 @@ class AgentRouter:
                 continue
 
             try:
-                result = await strategy.route(
+                result: RouteResult | None = await strategy.route(
                     request=request,
                     candidates=self._candidates,
                     session_ctx=session_ctx,
@@ -146,15 +146,15 @@ class AgentRouter:
 
         # DefaultFallbackStrategy 保证有结果，但加上保护以防万一
         if result is None:
-            fallback = DefaultFallbackStrategy()
-            result = await fallback.route(
+            fallback: DefaultFallbackStrategy = DefaultFallbackStrategy()
+            result: RouteResult | None = await fallback.route(
                 request=request,
                 candidates=self._candidates,
                 session_ctx=session_ctx,
             )
 
         # 计算延迟
-        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+        elapsed_ms: int = int((time.monotonic() - start_time) * 1000)
         result.latency_ms = elapsed_ms
 
         # 将绑定缓存到 Redis（置信度为 0 的默认回退则跳过）

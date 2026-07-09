@@ -5,8 +5,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.router.models import RouteResult, SessionContext, UserRequest
 from src.router.strategies.base import RoutingStrategy
@@ -40,10 +40,10 @@ class KeywordMatchStrategy(RoutingStrategy):
         session_ctx: SessionContext,
     ) -> RouteResult | None:
         """将用户输入与 Agent 关键词进行匹配。"""
-        text = request.text.lower()
+        text: str = request.text.lower()
 
         # 按路由优先级排序（越高越优先）
-        sorted_candidates = sorted(
+        sorted_candidates: Any = sorted(
             [c for c in candidates if c.routing.enabled and c.routing.keywords],
             key=lambda c: c.routing.priority,
             reverse=True,

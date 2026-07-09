@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Callable
+from typing import Any, Callable
 
 from src.utils.exceptions import AgentStateError
 from src.utils.logging import get_logger
@@ -108,8 +108,8 @@ class LifecycleStateMachine:
         Raises:
             如果从当前状态出发该转换不合法，抛出 AgentStateError。
         """
-        valid_transitions = TRANSITION_TABLE.get(self._current_state, {})
-        new_state = valid_transitions.get(event)
+        valid_transitions: Skill | None = TRANSITION_TABLE.get(self._current_state, {})
+        new_state: Skill | None = valid_transitions.get(event)
 
         if new_state is None:
             raise AgentStateError(
@@ -120,7 +120,7 @@ class LifecycleStateMachine:
         for hook in self._hooks["before_transition"]:
             hook(self._current_state, new_state)
 
-        old_state = self._current_state
+        old_state: Any = self._current_state
         self._current_state = new_state
 
         logger.info(

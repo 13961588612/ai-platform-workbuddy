@@ -113,11 +113,11 @@ class SkillRegistry:
 
     async def get_async(self, skill_id: str) -> Skill | None:
         """异步获取 Skill — 先查内存，再查缓存。"""
-        skill = self._skills.get(skill_id)
+        skill: Skill | None = self._skills.get(skill_id)
         if skill:
             return skill
         if self._cache:
-            cached = await self._cache.get_skill(skill_id)
+            cached: dict[str, Any] = await self._cache.get_skill(skill_id)
             if cached:
                 self._skills[skill_id] = cached
                 return cached
@@ -129,7 +129,7 @@ class SkillRegistry:
 
         若 Skill 非技能包或已加载，直接返回。
         """
-        skill = await self.get_async(skill_id)
+        skill: Skill | None = await self.get_async(skill_id)
         if skill is None:
             return None
         if skill.body_loaded or not skill.package_dir:
@@ -137,7 +137,7 @@ class SkillRegistry:
 
         from src.skills.loader import load_skill_package_body
 
-        skill = await load_skill_package_body(skill)
+        skill: Skill = await load_skill_package_body(skill)
         self._skills[skill_id] = skill
         if self._cache:
             try:
@@ -166,7 +166,7 @@ class SkillRegistry:
 
     async def update_embedding(self, skill_id: str) -> None:
         """为单个 Skill 重新生成 embedding。"""
-        skill = self._skills.get(skill_id)
+        skill: Skill | None = self._skills.get(skill_id)
         if not skill:
             logger.warning("update_embedding: skill not found", skill_id=skill_id)
             return
@@ -190,11 +190,11 @@ class SkillRegistry:
 
         返回新注册的 Skill 列表。
         """
-        tools = await discovery.list_tools(server_name)
+        tools: dict[str, Any] = await discovery.list_tools(server_name)
         new_skills: list[Skill] = []
         for tool in tools:
-            skill_id = f"mcp-{server_name}-{tool.get('name', 'unknown')}"
-            skill = Skill(
+            skill_id: str = f"mcp-{server_name}-{tool.get('name', 'unknown')}"
+            skill: Skill = Skill(
                 skill_id=skill_id,
                 name=tool.get("name", skill_id),
                 description=tool.get("description", ""),
@@ -223,7 +223,7 @@ class SkillRegistry:
 
     def record_call(self, skill_id: str) -> None:
         """递增内存调用计数器并更新 last_called_at。"""
-        skill = self._skills.get(skill_id)
+        skill: Skill | None = self._skills.get(skill_id)
         if skill:
             skill.call_count += 1
             skill.last_called_at = datetime.now(timezone.utc)
@@ -236,7 +236,7 @@ class SkillRegistry:
         sources: dict[str, int] = {}
         for skill in self._skills.values():
             categories[skill.category] = categories.get(skill.category, 0) + 1
-            src = skill.source.value if hasattr(skill.source, "value") else str(skill.source)
+            src: Any = skill.source.value if hasattr(skill.source, "value") else str(skill.source)
             sources[src] = sources.get(src, 0) + 1
         return {
             "total": len(self._skills),

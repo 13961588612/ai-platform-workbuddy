@@ -10,8 +10,8 @@ CredentialVault — 用于业务系统凭据的 AES-256-GCM 加密存储。
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 import structlog
 from sqlalchemy import select, update
@@ -45,16 +45,16 @@ class CredentialVault:
 
         返回存储的凭据映射的数据库行 ID。
         """
-        encrypted = encrypt_dict(credential)
+        encrypted: str = encrypt_dict(credential)
 
         # 检查是否存在
-        stmt = select(CredentialMappingModel).where(
+        stmt: Any = select(CredentialMappingModel).where(
             CredentialMappingModel.user_id == user_id,
             CredentialMappingModel.system_type == system_type,
             CredentialMappingModel.is_active.is_(True),
         )
-        result = await session.execute(stmt)
-        existing = result.scalar_one_or_none()
+        result: ToolResult = await session.execute(stmt)
+        existing: Any = result.scalar_one_or_none()
 
         if existing:
             existing.system_account = system_account
@@ -67,7 +67,7 @@ class CredentialVault:
             )
             return existing.id
 
-        new_mapping = CredentialMappingModel(
+        new_mapping: CredentialMappingModel = CredentialMappingModel(
             user_id=user_id,
             system_type=system_type,
             system_account=system_account,
@@ -92,13 +92,13 @@ class CredentialVault:
 
         如果没有存储凭据，则返回 ``None``。
         """
-        stmt = select(CredentialMappingModel).where(
+        stmt: Any = select(CredentialMappingModel).where(
             CredentialMappingModel.user_id == user_id,
             CredentialMappingModel.system_type == system_type,
             CredentialMappingModel.is_active.is_(True),
         )
-        result = await session.execute(stmt)
-        mapping = result.scalar_one_or_none()
+        result: ToolResult = await session.execute(stmt)
+        mapping: Any = result.scalar_one_or_none()
         if not mapping:
             return None
 
@@ -122,7 +122,7 @@ class CredentialVault:
 
         如果找到并停用了映射，则返回 True。
         """
-        stmt = (
+        stmt: Any = (
             update(CredentialMappingModel)
             .where(
                 CredentialMappingModel.user_id == user_id,
@@ -131,7 +131,7 @@ class CredentialVault:
             )
             .values(is_active=False)
         )
-        result = await session.execute(stmt)
+        result: ToolResult = await session.execute(stmt)
         return result.rowcount > 0  # type: ignore[union-attr]
 
     async def list_credentials(
@@ -140,12 +140,12 @@ class CredentialVault:
         user_id: str,
     ) -> list[dict[str, Any]]:
         """列出用户的所有活跃凭据映射（不含明文）。"""
-        stmt = select(CredentialMappingModel).where(
+        stmt: Any = select(CredentialMappingModel).where(
             CredentialMappingModel.user_id == user_id,
             CredentialMappingModel.is_active.is_(True),
         )
-        result = await session.execute(stmt)
-        mappings = result.scalars().all()
+        result: ToolResult = await session.execute(stmt)
+        mappings: Any = result.scalars().all()
         return [m.to_dict() for m in mappings]
 
     async def re_encrypt_all(self, session: AsyncSession) -> int:
@@ -153,16 +153,16 @@ class CredentialVault:
 
         在密钥轮换后使用。返回重新加密的映射数量。
         """
-        stmt = select(CredentialMappingModel).where(
+        stmt: Any = select(CredentialMappingModel).where(
             CredentialMappingModel.is_active.is_(True),
         )
-        result = await session.execute(stmt)
-        mappings = result.scalars().all()
+        result: ToolResult = await session.execute(stmt)
+        mappings: Any = result.scalars().all()
 
-        count = 0
+        count: int = 0
         for mapping in mappings:
             try:
-                plaintext = decrypt_dict(mapping.encrypted_credential)  # type: ignore[arg-type]
+                plaintext: dict[str, Any] = decrypt_dict(mapping.encrypted_credential)  # type: ignore[arg-type]
                 mapping.encrypted_credential = encrypt_dict(plaintext)
                 count += 1
             except Exception:

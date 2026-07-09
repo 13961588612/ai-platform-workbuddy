@@ -6,9 +6,9 @@ Agent 运行时所有 LLM 调用都经过此 Gateway。
 """
 
 from __future__ import annotations
+from typing import Any
 
 from collections.abc import AsyncIterator
-from typing import Any
 
 from src.config import get_settings
 from src.llm.deepseek_adapter import DeepSeekAdapter
@@ -90,11 +90,11 @@ class LLMGateway:
         self, provider: str, request: LLMRequest
     ) -> LLMRequest:
         """跨 provider 故障转移时使用 provider 对应的模型。"""
-        model = request.model
+        model: Any = request.model
         if provider == "deepseek" and "deepseek" not in model.lower():
-            model = self._settings.LLM_PRIMARY_MODEL
+            model: Any = self._settings.LLM_PRIMARY_MODEL
         elif provider == "qwen" and "qwen" not in model.lower():
-            model = self._settings.LLM_FALLBACK_MODEL
+            model: Any = self._settings.LLM_FALLBACK_MODEL
         if model == request.model:
             return request
         return request.model_copy(update={"model": model})
@@ -159,12 +159,12 @@ class LLMGateway:
         )
 
         # 获取要尝试的 provider 有序列表（活跃 + 备用）
-        providers = self._failover_manager.get_failover_providers()
+        providers: list[str] = self._failover_manager.get_failover_providers()
 
         last_error: Exception | None = None
         for provider in providers:
             try:
-                response = await self._call_provider(provider, request)
+                response: LLMResponse = await self._call_provider(provider, request)
                 # 成功 — 记录
                 self._failover_manager.record_success(provider)
 
@@ -188,7 +188,7 @@ class LLMGateway:
                 return response
 
             except LLMProviderError as exc:
-                last_error = exc
+                last_error: Any = exc
                 self._failover_manager.record_failure(provider, str(exc))
 
                 # 处理 401/403 — 将 Key 标记为无效
@@ -238,8 +238,8 @@ class LLMGateway:
             estimated_tokens=request.max_tokens,
         )
 
-        providers = self._failover_manager.get_failover_providers()
-        total_usage = TokenUsage()
+        providers: list[str] = self._failover_manager.get_failover_providers()
+        total_usage: TokenUsage = TokenUsage()
         provider_used: str = ""
         success: bool = False
 
@@ -250,8 +250,8 @@ class LLMGateway:
                         total_usage += chunk.usage
                     yield chunk
 
-                success = True
-                provider_used = provider
+                success: bool = True
+                provider_used: Any = provider
                 self._failover_manager.record_success(provider)
                 break
 
@@ -289,14 +289,14 @@ class LLMGateway:
         request: LLMRequest,
     ) -> LLMResponse:
         """通过 Key 和代理调用指定 provider 的适配器。"""
-        adapter = self._adapters.get(provider)
+        adapter: Skill | None = self._adapters.get(provider)
         if adapter is None:
             raise LLMProviderError(provider, f"Unknown provider: {provider}")
 
-        key = self._key_manager.get_key(provider)
+        key: APIKey = self._key_manager.get_key(provider)
 
         # 域名白名单检查
-        endpoint = self._get_provider_endpoint(provider)
+        endpoint: str = self._get_provider_endpoint(provider)
         if not self._proxy_manager.check_domain(endpoint):
             raise LLMProviderError(
                 provider,
@@ -304,8 +304,8 @@ class LLMGateway:
             )
 
         try:
-            provider_request = self._remap_request_for_provider(provider, request)
-            response = await adapter.chat(
+            provider_request: LLMRequest = self._remap_request_for_provider(provider, request)
+            response: LLMResponse = await adapter.chat(
                 request=provider_request,
                 api_key=key.key,
                 proxy_manager=self._proxy_manager,
@@ -327,20 +327,20 @@ class LLMGateway:
         request: LLMRequest,
     ) -> AsyncIterator[LLMChunk]:
         """调用指定 provider 的流式适配器。"""
-        adapter = self._adapters.get(provider)
+        adapter: Skill | None = self._adapters.get(provider)
         if adapter is None:
             raise LLMProviderError(provider, f"Unknown provider: {provider}")
 
-        key = self._key_manager.get_key(provider)
+        key: APIKey = self._key_manager.get_key(provider)
 
-        endpoint = self._get_provider_endpoint(provider)
+        endpoint: str = self._get_provider_endpoint(provider)
         if not self._proxy_manager.check_domain(endpoint):
             raise LLMProviderError(
                 provider,
                 f"Domain not in whitelist: {endpoint}",
             )
 
-        provider_request = self._remap_request_for_provider(provider, request)
+        provider_request: LLMRequest = self._remap_request_for_provider(provider, request)
         async for chunk in adapter.chat_stream(
             request=provider_request,
             api_key=key.key,

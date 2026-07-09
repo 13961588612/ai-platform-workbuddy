@@ -130,13 +130,13 @@ class RuntimeRegistry:
         is_default: bool = False,
     ) -> None:
         """注册一个运行时工厂。"""
-        caps = capabilities or factory.capabilities()
-        version = "1.0.0"
+        caps: Any = capabilities or factory.capabilities()
+        version: str = "1.0.0"
 
         # 尝试从工厂创建的实例中获取版本
         try:
-            temp = factory.create(config=None)  # type: ignore[arg-type]
-            version = temp.version
+            temp: AgentRuntime = factory.create(config=None)  # type: ignore[arg-type]
+            version: Any = temp.version
         except Exception:
             pass
 
@@ -175,21 +175,21 @@ class RuntimeRegistry:
         Returns:
             一个已初始化的 AgentRuntime 实例。
         """
-        rt_type = type_name or self._default_type
+        rt_type: Any = type_name or self._default_type
         if rt_type not in self._factories:
             raise AIPlatformError(
                 f"Runtime type not registered: {rt_type}",
                 code=2004,
             )
 
-        factory = self._factories[rt_type]
+        factory: Any = self._factories[rt_type]
         if not factory.validate_config(config):
             raise AIPlatformError(
                 f"Invalid configuration for runtime: {rt_type}",
                 code=7001,
             )
 
-        runtime = factory.create(config)
+        runtime: AgentRuntime = factory.create(config)
         logger.info("Runtime created", type=rt_type)
         return runtime
 

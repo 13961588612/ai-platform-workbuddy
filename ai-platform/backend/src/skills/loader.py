@@ -1,9 +1,9 @@
 """从 configs/skills/packages/ 加载 Agent Skills Spec 技能包。"""
 
 from __future__ import annotations
+from typing import Any
 
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -32,7 +32,7 @@ def _parse_source(raw: str) -> SkillSource:
     Returns:
         对应的 ``SkillSource``；无法识别时返回 ``CUSTOM``。
     """
-    key = raw.lower()
+    key: str = raw.lower()
     if key == "mcp":
         return SkillSource.MCP
     if key == "builtin":
@@ -51,7 +51,7 @@ def _parse_status(raw: str) -> SkillStatus:
     Returns:
         对应的 ``SkillStatus``；无法识别时返回 ``ACTIVE``。
     """
-    key = raw.lower()
+    key: str = raw.lower()
     if key == "inactive":
         return SkillStatus.INACTIVE
     if key == "deprecated":
@@ -66,8 +66,8 @@ def _metadata_to_skill(
     package_dir: str = "",
 ) -> Skill:
     """将 Front Matter 元数据转换为 Skill 模型（不含正文）。"""
-    skill_id = resolve_skill_id(metadata, package_name)
-    source = _parse_source(str(metadata.get("source", "package" if package_name else "custom")))
+    skill_id: str = resolve_skill_id(metadata, package_name)
+    source: SkillSource = _parse_source(str(metadata.get("source", "package" if package_name else "custom")))
 
     return Skill(
         skill_id=skill_id,
@@ -94,19 +94,19 @@ def _metadata_to_skill(
 def load_enabled_skill_ids(config_base: Path) -> set[str]:
     """从各 Agent 的 enabled-skills.yaml 收集已启用的 skill_id。"""
     enabled: set[str] = set()
-    agents_dir = config_base / "agents"
+    agents_dir: Any = config_base / "agents"
     if not agents_dir.is_dir():
         return enabled
 
     for agent_dir in sorted(agents_dir.iterdir()):
         if not agent_dir.is_dir():
             continue
-        enabled_file = agent_dir / "skills" / "enabled-skills.yaml"
+        enabled_file: Any = agent_dir / "skills" / "enabled-skills.yaml"
         if not enabled_file.is_file():
             continue
         try:
             with open(enabled_file, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
+                data: Any = yaml.safe_load(f) or {}
         except yaml.YAMLError as exc:
             logger.warning("解析 enabled-skills 失败", path=str(enabled_file), error=str(exc))
             continue
@@ -127,9 +127,11 @@ async def load_skill_package_body(skill: Skill) -> Skill:
     if skill.body_loaded or not skill.package_dir:
         return skill
 
-    skill_md = Path(skill.package_dir) / "SKILL.md"
+    skill_md: Any = Path(skill.package_dir) / "SKILL.md"
+    metadata: dict[str, Any]
+    body: str
     metadata, body = read_skill_full(skill_md)
-    attachments = list_package_attachments(Path(skill.package_dir))
+    attachments: dict[str, list[str]] = list_package_attachments(Path(skill.package_dir))
 
     # 元数据以注册时为准，此处仅填充正文
     skill.load_body(body, attachments)
@@ -154,22 +156,24 @@ async def load_skills_from_files(
 
     扫描 ``packages/*/SKILL.md``，仅解析 Front Matter 元数据，不加载 Markdown 正文。
     """
-    base = config_base or Path(get_settings().CONFIG_BASE_PATH)
-    enabled_ids = load_enabled_skill_ids(base) if enabled_only else set()
-    filter_enabled = enabled_only and bool(enabled_ids)
-    loaded = 0
+    base: Any = config_base or Path(get_settings().CONFIG_BASE_PATH)
+    enabled_ids: set[str] | set[Any] = load_enabled_skill_ids(base) if enabled_only else set()
+    filter_enabled: Any = enabled_only and bool(enabled_ids)
+    loaded: int = 0
     seen_ids: set[str] = set()
 
     # ----- Agent Skills Spec 技能包 -----
-    packages_root = base / "skills" / "packages"
+    packages_root: Any = base / "skills" / "packages"
     for package_dir in iter_skill_packages(packages_root):
-        skill_md = package_dir / "SKILL.md"
+        skill_md: Any = package_dir / "SKILL.md"
+        metadata: dict[str, Any]
+        _: str
         metadata, _ = read_skill_metadata(skill_md)
         if not metadata:
             logger.warning("跳过无元数据的技能包", path=str(package_dir))
             continue
 
-        skill = _metadata_to_skill(
+        skill: Skill = _metadata_to_skill(
             metadata,
             package_name=package_dir.name,
             package_dir=str(package_dir.resolve()),

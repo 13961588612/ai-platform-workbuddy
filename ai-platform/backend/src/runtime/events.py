@@ -5,9 +5,9 @@ Gateway 的 EventTransformer 将这些事件映射为各渠道特定的格式。
 """
 
 from __future__ import annotations
+from typing import Any
 
 from enum import Enum
-from typing import Any
 
 from pydantic import BaseModel, Field
 

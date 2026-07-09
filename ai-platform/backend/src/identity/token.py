@@ -6,9 +6,9 @@ Token 使用 settings 中的 ``JWT_SECRET_KEY`` 进行签名。
 """
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 import jwt
 import structlog
@@ -52,10 +52,10 @@ class TokenManager:
         agent_id: str | None = None,
     ) -> TokenSet:
         """为用户创建新的 access + refresh token 对。"""
-        now = datetime.now(timezone.utc)
-        roles = roles or []
+        now: Any = datetime.now(timezone.utc)
+        roles: Any = roles or []
 
-        access_payload = {
+        access_payload: dict[str, Any] = {
             "user_id": user_id,
             "userId": user_id,
             "username": username,
@@ -68,7 +68,7 @@ class TokenManager:
             "exp": int((now + self._access_expire).timestamp()),
             "type": _ACCESS_TOKEN_TYPE,
         }
-        refresh_payload = {
+        refresh_payload: dict[str, Any] = {
             "user_id": user_id,
             "username": username,
             "type": _REFRESH_TOKEN_TYPE,
@@ -77,8 +77,8 @@ class TokenManager:
             "exp": int((now + self._refresh_expire).timestamp()),
         }
 
-        access_token = jwt.encode(access_payload, self._secret, algorithm=self._algorithm)
-        refresh_token = jwt.encode(refresh_payload, self._secret, algorithm=self._algorithm)
+        access_token: bytes = jwt.encode(access_payload, self._secret, algorithm=self._algorithm)
+        refresh_token: bytes = jwt.encode(refresh_payload, self._secret, algorithm=self._algorithm)
 
         logger.info("Token set created", user_id=user_id)
         return TokenSet(
@@ -93,7 +93,7 @@ class TokenManager:
         Raises:
             TokenError: 如果 token 无效、过期或不是 access token。
         """
-        payload = self._decode(token)
+        payload: dict[str, Any] = self._decode(token)
         if payload.get("type") != _ACCESS_TOKEN_TYPE:
             raise TokenError("Expected access token, got different type")
         return TokenPayload(
@@ -114,14 +114,14 @@ class TokenManager:
         Raises:
             TokenError: 如果 token 无效、过期或不是 refresh token。
         """
-        payload = self._decode(token)
+        payload: dict[str, Any] = self._decode(token)
         if payload.get("type") != _REFRESH_TOKEN_TYPE:
             raise TokenError("Expected refresh token, got different type")
         return payload
 
     def refresh_token_set(self, refresh_token: str) -> TokenSet:
         """从有效的 refresh token 创建新的 TokenSet。"""
-        payload = self.verify_refresh_token(refresh_token)
+        payload: dict[str, Any] = self.verify_refresh_token(refresh_token)
         # 注意：新的 TokenSet 具有相同的用户信息但新的过期时间
         # 角色和部门不在 refresh token 中；如果需要，
         # 调用方必须重新获取它们。

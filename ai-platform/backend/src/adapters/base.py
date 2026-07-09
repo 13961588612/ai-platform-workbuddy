@@ -13,9 +13,9 @@ BusinessSystemAdapter — 所有业务系统适配器的抽象基类。
 """
 
 from __future__ import annotations
+from typing import Any
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 import httpx
 import structlog
@@ -125,14 +125,14 @@ class BusinessSystemAdapter(ABC):
         Returns:
             包含 ``success``、``data`` 和 ``error`` 键的字典。
         """
-        tool = self.get_tool(tool_name)
+        tool: ToolDefinition | None = self.get_tool(tool_name)
         if not tool:
             return ToolResult(
                 success=False, error=f"Unknown tool: {tool_name}"
             ).model_dump()
 
         try:
-            result = await self._execute_tool(tool_name, arguments, credential)
+            result: ToolResult = await self._execute_tool(tool_name, arguments, credential)
             return result.model_dump()
         except Exception as exc:
             logger.exception(
@@ -153,7 +153,7 @@ class BusinessSystemAdapter(ABC):
             return False
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
-                resp = await client.get(f"{self._base_url}/health")
+                resp: Skill | None = await client.get(f"{self._base_url}/health")
                 return resp.status_code < 500
         except Exception:
             return False
@@ -172,25 +172,25 @@ class BusinessSystemAdapter(ABC):
 
         自动从 *credential* 注入认证头。
         """
-        url = f"{self._base_url}{path}"
+        url: str = f"{self._base_url}{path}"
         headers: dict[str, str] = {"Content-Type": "application/json"}
 
         if credential:
-            token = credential.get("token") or credential.get("api_key")
+            token: Any = credential.get("token") or credential.get("api_key")
             if token:
                 headers["Authorization"] = f"Bearer {token}"
-            username = credential.get("username")
-            password = credential.get("password")
+            username: Skill | None = credential.get("username")
+            password: Skill | None = credential.get("password")
             if username and password:
                 import base64
 
-                basic = base64.b64encode(
+                basic: str = base64.b64encode(
                     f"{username}:{password}".encode("utf-8")
                 ).decode("ascii")
                 headers["Authorization"] = f"Basic {basic}"
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.request(
+            resp: Any = await client.request(
                 method=method,
                 url=url,
                 headers=headers,

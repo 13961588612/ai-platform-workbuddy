@@ -6,8 +6,8 @@
 """
 
 from __future__ import annotations
-
 from typing import Any
+
 
 from src.adapters.base import BusinessSystemAdapter, ToolDefinition, ToolResult
 
@@ -146,32 +146,32 @@ class FinanceAdapter(BusinessSystemAdapter):
             包含财务 API 响应数据或错误信息的 ``ToolResult``。
         """
         if tool_name == "query_expense_reports":
-            data = await self._http_request(
+            data: dict[str, Any] = await self._http_request(
                 "GET", "/api/expense-reports", credential, params=arguments
             )
             return ToolResult(success=True, data=data)
         elif tool_name == "create_expense_report":
-            data = await self._http_request(
+            data: dict[str, Any] = await self._http_request(
                 "POST", "/api/expense-reports", credential, json_body=arguments
             )
             return ToolResult(success=True, data=data)
         elif tool_name == "query_budget":
-            data = await self._http_request(
+            data: dict[str, Any] = await self._http_request(
                 "GET", "/api/budget", credential, params=arguments
             )
             return ToolResult(success=True, data=data)
         elif tool_name == "query_financial_statements":
-            data = await self._http_request(
+            data: dict[str, Any] = await self._http_request(
                 "GET", "/api/statements", credential, params=arguments
             )
             return ToolResult(success=True, data=data)
         elif tool_name == "query_invoices":
-            data = await self._http_request(
+            data: dict[str, Any] = await self._http_request(
                 "GET", "/api/invoices", credential, params=arguments
             )
             return ToolResult(success=True, data=data)
         elif tool_name == "reconciliation":
-            data = await self._http_request(
+            data: dict[str, Any] = await self._http_request(
                 "POST", "/api/reconciliation", credential, json_body=arguments
             )
             return ToolResult(success=True, data=data)

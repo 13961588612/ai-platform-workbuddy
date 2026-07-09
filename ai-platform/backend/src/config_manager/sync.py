@@ -8,10 +8,10 @@
 """
 
 from __future__ import annotations
+from typing import Any
 
 import json
 from pathlib import Path
-from typing import Any
 
 import yaml
 from sqlalchemy import select
@@ -46,8 +46,8 @@ class ConfigSync:
 
         读取 YAML 文件，解析后 upsert 到 agent_configs 表。
         """
-        agent_dir = Path(self._base_path) / "agents" / agent_id
-        agent_yaml = agent_dir / "agent.yaml"
+        agent_dir: Any = Path(self._base_path) / "agents" / agent_id
+        agent_yaml: Any = agent_dir / "agent.yaml"
 
         if not agent_yaml.exists():
             logger.warning("Agent YAML not found for sync", agent_id=agent_id)
@@ -55,30 +55,30 @@ class ConfigSync:
 
         try:
             with open(agent_yaml, encoding="utf-8") as f:
-                config_data = yaml.safe_load(f) or {}
+                config_data: Any = yaml.safe_load(f) or {}
         except yaml.YAMLError as exc:
             logger.error("Failed to parse YAML for sync", agent_id=agent_id, error=str(exc))
             return
 
-        agent_section = config_data.get("agent", config_data)
-        config_json = json.dumps(config_data, ensure_ascii=False)
+        agent_section: Skill | None = config_data.get("agent", config_data)
+        config_json: str = json.dumps(config_data, ensure_ascii=False)
 
         # 如果存在则加载 metadata
-        metadata_yaml = agent_dir / "metadata.yaml"
-        metadata_str = ""
+        metadata_yaml: Any = agent_dir / "metadata.yaml"
+        metadata_str: str = ""
         if metadata_yaml.exists():
             with open(metadata_yaml, encoding="utf-8") as f:
-                metadata_str = f.read()
+                metadata_str: Any = f.read()
 
-        routing = agent_section.get("routing", {})
+        routing: Skill | None = agent_section.get("routing", {})
 
         async with db_session_context() as session:
             # 检查记录是否已存在
-            stmt = select(AgentConfigModel).where(
+            stmt: Any = select(AgentConfigModel).where(
                 AgentConfigModel.agent_id == agent_id
             )
-            result = await session.execute(stmt)
-            existing = result.scalar_one_or_none()
+            result: ToolResult = await session.execute(stmt)
+            existing: Any = result.scalar_one_or_none()
 
             if existing:
                 # 更新
@@ -98,7 +98,7 @@ class ConfigSync:
                 existing.is_active = True
             else:
                 # 插入
-                record = AgentConfigModel(
+                record: AgentConfigModel = AgentConfigModel(
                     agent_id=agent_id,
                     display_name=agent_section.get("display_name", agent_id),
                     description=agent_section.get("description", ""),
@@ -126,29 +126,29 @@ class ConfigSync:
         读取 agent_configs 记录并写入 YAML 文件。
         """
         async with db_session_context() as session:
-            stmt = select(AgentConfigModel).where(
+            stmt: Any = select(AgentConfigModel).where(
                 AgentConfigModel.agent_id == agent_id,
                 AgentConfigModel.is_deleted == False,  # noqa: E712
             )
-            result = await session.execute(stmt)
-            row = result.scalar_one_or_none()
+            result: ToolResult = await session.execute(stmt)
+            row: Any = result.scalar_one_or_none()
 
         if row is None:
             logger.warning("Agent config not found in DB for sync", agent_id=agent_id)
             return
 
-        agent_dir = Path(self._base_path) / "agents" / agent_id
+        agent_dir: Any = Path(self._base_path) / "agents" / agent_id
         agent_dir.mkdir(parents=True, exist_ok=True)
 
         # 写入 agent.yaml
-        config_data = json.loads(row.config_yaml) if row.config_yaml else {}
-        agent_yaml = agent_dir / "agent.yaml"
+        config_data: Any = json.loads(row.config_yaml) if row.config_yaml else {}
+        agent_yaml: Any = agent_dir / "agent.yaml"
         with open(agent_yaml, "w", encoding="utf-8") as f:
             yaml.dump(config_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
         # 如果存在则写入 metadata.yaml
         if row.metadata_yaml:
-            metadata_path = agent_dir / "metadata.yaml"
+            metadata_path: Any = agent_dir / "metadata.yaml"
             with open(metadata_path, "w", encoding="utf-8") as f:
                 f.write(row.metadata_yaml)
 
@@ -161,11 +161,11 @@ class ConfigSync:
         Returns:
             同步的配置数量。
         """
-        agents_dir = Path(self._base_path) / "agents"
+        agents_dir: Any = Path(self._base_path) / "agents"
         if not agents_dir.exists():
             return 0
 
-        count = 0
+        count: int = 0
         for entry in sorted(agents_dir.iterdir()):
             if entry.is_dir() and (entry / "agent.yaml").exists():
                 try:
@@ -189,14 +189,14 @@ class ConfigSync:
             同步的配置数量。
         """
         async with db_session_context() as session:
-            stmt = select(AgentConfigModel).where(
+            stmt: Any = select(AgentConfigModel).where(
                 AgentConfigModel.is_deleted == False,  # noqa: E712
                 AgentConfigModel.is_active == True,  # noqa: E712
             )
-            result = await session.execute(stmt)
-            rows = result.scalars().all()
+            result: ToolResult = await session.execute(stmt)
+            rows: Any = result.scalars().all()
 
-        count = 0
+        count: int = 0
         for row in rows:
             try:
                 await self.db_to_file(row.agent_id)

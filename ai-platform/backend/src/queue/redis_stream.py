@@ -1,11 +1,11 @@
 """Redis Streams 生产/消费 — 与 Gateway redisStream.ts 字段对齐。"""
 
 from __future__ import annotations
+from typing import Any
 
 import json
 import os
 from dataclasses import dataclass
-from typing import Any
 
 import redis.asyncio as aioredis
 from redis.exceptions import ResponseError
@@ -85,8 +85,8 @@ class StreamKeys:
 
 def parse_inbound_fields(fields: dict[str, str]) -> InboundStreamMessage:
     """将 Redis Stream 字段解析为 InboundStreamMessage。"""
-    metadata_raw = fields.get("metadata")
-    metadata = json.loads(metadata_raw) if metadata_raw else None
+    metadata_raw: Skill | None = fields.get("metadata")
+    metadata: Any = json.loads(metadata_raw) if metadata_raw else None
     return InboundStreamMessage(
         id=fields.get("id", ""),
         session_id=fields.get("sessionId", ""),
@@ -105,12 +105,12 @@ def fields_to_dict(raw_fields: list[Any]) -> dict[str, str]:
     """Redis XREADGROUP flat list → dict。"""
     result: dict[str, str] = {}
     for index in range(0, len(raw_fields), 2):
-        key = raw_fields[index]
-        value = raw_fields[index + 1] if index + 1 < len(raw_fields) else ""
+        key: Any = raw_fields[index]
+        value: Any = raw_fields[index + 1] if index + 1 < len(raw_fields) else ""
         if isinstance(key, bytes):
-            key = key.decode()
+            key: str = key.decode()
         if isinstance(value, bytes):
-            value = value.decode()
+            value: str = value.decode()
         result[str(key)] = str(value)
     return result
 
@@ -168,8 +168,8 @@ class StreamProducer:
         Returns:
             Redis 分配的 stream 消息 ID。
         """
-        payload = event.model_dump(mode="json", exclude_none=True)
-        fields = {
+        payload: dict[str, Any] = event.model_dump(mode="json", exclude_none=True)
+        fields: dict[str, Any] = {
             "sessionId": session_id,
             "userId": user_id,
             "channel": to_gateway_channel(channel),
@@ -178,7 +178,7 @@ class StreamProducer:
             "eventType": str(event.type.value),
             "event": json.dumps(payload, ensure_ascii=False),
         }
-        message_id = await self._redis.xadd(
+        message_id: Any = await self._redis.xadd(
             StreamKeys.agent_events(),
             fields,
             maxlen=MAX_STREAM_LENGTH,

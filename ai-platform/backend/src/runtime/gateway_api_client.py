@@ -1,10 +1,10 @@
 """LLM Gateway 适配器，实现了 OpenHarness 的 SupportsStreamingMessages 接口。"""
 
 from __future__ import annotations
+from typing import Any
 
 import json
 from collections.abc import AsyncIterator
-from typing import Any
 
 from openharness.api.client import (
     ApiMessageCompleteEvent,
@@ -24,7 +24,7 @@ def _openai_messages_to_llm(openai_messages: list[dict[str, Any]]) -> list[LLMMe
     """将 OpenAI 格式的聊天消息转换为平台的 LLMMessage 列表。"""
     llm_messages: list[LLMMessage] = []
     for msg in openai_messages:
-        role = msg.get("role", "user")
+        role: Skill | None = msg.get("role", "user")
         if role == "system":
             llm_messages.append(LLMMessage(role=LLMRole.SYSTEM, content=msg.get("content", "") or ""))
             continue
@@ -38,8 +38,8 @@ def _openai_messages_to_llm(openai_messages: list[dict[str, Any]]) -> list[LLMMe
             )
             continue
         if role == "assistant":
-            tool_calls = msg.get("tool_calls") or []
-            api_tool_calls = [
+            tool_calls: Any = msg.get("tool_calls") or []
+            api_tool_calls: list[dict[str, Any]] = [
                 {
                     "id": tc.get("id", ""),
                     "type": "function",
@@ -108,12 +108,12 @@ class GatewayApiClient:
         Yields:
             ``ApiTextDeltaEvent`` 与最终的 ``ApiMessageCompleteEvent``。
         """
-        openai_messages = _convert_messages_to_openai(request.messages, request.system_prompt)
-        llm_messages = _openai_messages_to_llm(openai_messages)
-        openai_tools = _convert_tools_to_openai(request.tools) if request.tools else []
-        has_tools = bool(openai_tools)
+        openai_messages: Any = _convert_messages_to_openai(request.messages, request.system_prompt)
+        llm_messages: list[LLMMessage] = _openai_messages_to_llm(openai_messages)
+        openai_tools: Any = _convert_tools_to_openai(request.tools) if request.tools else []
+        has_tools: bool = bool(openai_tools)
 
-        llm_request = LLMRequest(
+        llm_request: LLMRequest = LLMRequest(
             messages=llm_messages,
             model=self._model,
             temperature=self._temperature,
@@ -127,9 +127,9 @@ class GatewayApiClient:
         )
 
         if has_tools:
-            response = await self._gateway.chat(llm_request)
+            response: LLMResponse = await self._gateway.chat(llm_request)
             if response.content:
-                chunk_size = 40
+                chunk_size: int = 40
                 for i in range(0, len(response.content), chunk_size):
                     yield ApiTextDeltaEvent(text=response.content[i : i + chunk_size])
 
@@ -137,12 +137,12 @@ class GatewayApiClient:
             if response.content:
                 content_blocks.append(TextBlock(text=response.content))
             for tc in response.tool_calls:
-                function = tc.get("function", {})
-                raw_args = function.get("arguments", "{}")
+                function: Skill | None = tc.get("function", {})
+                raw_args: Skill | None = function.get("arguments", "{}")
                 try:
-                    parsed_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                    parsed_args: Any = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
                 except (json.JSONDecodeError, TypeError):
-                    parsed_args = {}
+                    parsed_args: dict[str, Any] = {}
                 content_blocks.append(
                     ToolUseBlock(
                         id=tc.get("id", ""),
@@ -161,19 +161,19 @@ class GatewayApiClient:
             )
             return
 
-        total_usage = TokenUsage()
-        collected = ""
-        finish_reason = "stop"
+        total_usage: TokenUsage = TokenUsage()
+        collected: str = ""
+        finish_reason: str = "stop"
         async for chunk in self._gateway.chat_stream(llm_request):
             if chunk.content:
                 collected += chunk.content
                 yield ApiTextDeltaEvent(text=chunk.content)
             if chunk.usage is not None:
-                total_usage = chunk.usage
+                total_usage: Any = chunk.usage
             if chunk.finish_reason:
-                finish_reason = chunk.finish_reason
+                finish_reason: Any = chunk.finish_reason
 
-        content_blocks = [TextBlock(text=collected)] if collected else []
+        content_blocks: list[TextBlock] | list[Any] = [TextBlock(text=collected)] if collected else []
         yield ApiMessageCompleteEvent(
             message=ConversationMessage(role="assistant", content=content_blocks),
             usage=UsageSnapshot(
