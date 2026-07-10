@@ -20,13 +20,12 @@ from uuid import uuid4
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from src.config import get_settings
+from src.config import Settings, get_settings
 from src.push.models import (
     PushMessage,
     PushMessageStatus,
     PushMessageType,
     PushSchedule,
-    PushTask,
 )
 from src.push.wecom_pusher import WecomPusher, get_wecom_pusher
 from src.utils.logging import get_logger
@@ -195,7 +194,7 @@ class PushScheduler:
 
     def update_schedule_status(self, schedule_id: str, enabled: bool) -> bool:
         """启用或禁用一个调度。"""
-        schedule: Skill | None = self._schedules.get(schedule_id)
+        schedule: PushSchedule | None = self._schedules.get(schedule_id)
         if not schedule:
             return False
 
@@ -226,7 +225,7 @@ class PushScheduler:
         由 APScheduler 在 cron 触发器触发时调用。
         渲染模板并向目标用户发送推送消息。
         """
-        schedule: Skill | None = self._schedules.get(schedule_id)
+        schedule: PushSchedule | None = self._schedules.get(schedule_id)
         if not schedule or not schedule.enabled:
             logger.warning(
                 "Scheduled push skipped — schedule not found or disabled",
@@ -308,7 +307,7 @@ class PushScheduler:
         Returns:
             包含状态和详情的结果字典。
         """
-        schedule: Skill | None = self._schedules.get(schedule_id)
+        schedule: PushSchedule | None = self._schedules.get(schedule_id)
         if not schedule:
             return {"status": "error", "message": "Schedule not found"}
 
@@ -351,7 +350,7 @@ class PushScheduler:
         if not push_config.get("enabled", False):
             return []
 
-        schedules_data: Skill | None = push_config.get("schedules", [])
+        schedules_data: list[Any] = push_config.get("schedules", [])
         created_ids: list[str] = []
 
         for sched_data in schedules_data:

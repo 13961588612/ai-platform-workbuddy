@@ -89,15 +89,19 @@ def _pydantic_field_name(json_key: str) -> str:
 
 def _input_model_from_schema(tool_name: str, schema: dict[str, object]) -> type[BaseModel]:
     """从 MCP JSON Schema 构建 Pydantic 输入模型，兼容 _ 开头字段名。"""
-    properties: Skill | None = schema.get("properties", {})
+    properties: dict[str, Any] = schema.get("properties", {})
     if not isinstance(properties, dict):
         return create_model(f"{tool_name.title().replace('-', '_')}Input")
 
     fields: dict[str, tuple[Any, Any]] = {}
-    required: set[Any] = set(schema.get("required", [])) if isinstance(schema.get("required", []), list) else set()
+    required: set[Any] = (
+        set(schema.get("required", []))
+        if isinstance(schema.get("required", []), list)
+        else set()
+    )
     for json_key in properties:
         prop: Any = properties[json_key] if isinstance(properties[json_key], dict) else {}
-        py_type: Skill | None = _JSON_TYPE_MAP.get(str(prop.get("type", "")), object)
+        py_type: type = _JSON_TYPE_MAP.get(str(prop.get("type", "")), object)
         attr_name: str = _pydantic_field_name(str(json_key))
         field_kwargs: dict[str, Any] = {}
         if str(json_key) != attr_name:
@@ -150,7 +154,9 @@ class PlatformMcpToolAdapter(BaseTool):
             成功时为工具输出字符串；失败时 ``is_error=True``。
         """
         del context
-        payload: dict[str, Any] = arguments.model_dump(mode="json", exclude_none=True, by_alias=True)
+        payload: dict[str, Any] = arguments.model_dump(
+            mode="json", exclude_none=True, by_alias=True
+        )
         logger.info(
             "MCP tool call started",
             tool=self.name,
@@ -353,7 +359,7 @@ def create_platform_tool_registry(
             "No tools matched allowed_tools; falling back to skill only",
             patterns=patterns,
         )
-        skill_tool: Skill | None = source.get("skill")
+        skill_tool: BaseTool | None = source.get("skill")
         if skill_tool is not None:
             registry.register(SafeToolWrapper(skill_tool))
             registered.append(skill_tool.name)

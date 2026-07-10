@@ -12,9 +12,9 @@ import os
 import redis.asyncio as aioredis
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from src.agent.manager import get_agent_manager
-from src.agent.session import get_session_manager
-from src.config import get_settings
+from src.agent.manager import AgentInstance, AgentManager, get_agent_manager
+from src.agent.session import Message, SessionManager, get_session_manager
+from src.config import Settings, get_settings
 from src.queue.redis_stream import (
     BLOCK_MS,
     CONSUMER_GROUP,
@@ -97,7 +97,7 @@ class InboundStreamWorker:
             该 session 专用的 ``asyncio.Lock``。
         """
         async with self._session_locks_guard:
-            lock: Skill | None = self._session_locks.get(session_id)
+            lock: asyncio.Lock | None = self._session_locks.get(session_id)
             if lock is None:
                 lock: asyncio.Lock = asyncio.Lock()
                 self._session_locks[session_id] = lock

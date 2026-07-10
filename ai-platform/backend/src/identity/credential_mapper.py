@@ -52,7 +52,7 @@ class CredentialMapper:
             CredentialMappingModel.system_type == system_type,
             CredentialMappingModel.is_active.is_(True),
         )
-        result: ToolResult = await session.execute(stmt)
+        result: Any = await session.execute(stmt)
         mapping: Any = result.scalar_one_or_none()
         if not mapping:
             logger.debug(
@@ -115,5 +115,5 @@ class CredentialMapper:
             CredentialMappingModel.user_id == user_id,
             CredentialMappingModel.is_active.is_(True),
         )
-        result: ToolResult = await session.execute(stmt)
+        result: Any = await session.execute(stmt)
         return [row[0] for row in result.all()]

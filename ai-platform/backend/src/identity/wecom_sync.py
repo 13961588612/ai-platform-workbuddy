@@ -79,12 +79,12 @@ class WeComOrgSync:
                 DepartmentModel.dept_id == dept_id,
                 DepartmentModel.deleted_at.is_(None),
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             existing: Any = result.scalar_one_or_none()
 
             if existing:
                 existing.name = dept_data.get("name", existing.name)
-                parent_id: Skill | None = dept_data.get("parentid")
+                parent_id: int | None = dept_data.get("parentid")
                 if parent_id is not None:
                     existing.parent_id = str(parent_id)
             else:
@@ -108,7 +108,7 @@ class WeComOrgSync:
             DepartmentModel.deleted_at.is_(None),
             DepartmentModel.is_active.is_(True),
         )
-        result: ToolResult = await session.execute(stmt)
+        result: Any = await session.execute(stmt)
         departments: Any = result.scalars().all()
 
         count: int = 0
@@ -129,7 +129,7 @@ class WeComOrgSync:
                 continue
 
             for user_data in users:
-                wecom_user_id: Skill | None = user_data.get("userid", "")
+                wecom_user_id: str = user_data.get("userid", "")
                 if not wecom_user_id or wecom_user_id in seen_userids:
                     continue
                 seen_userids.add(wecom_user_id)
@@ -146,16 +146,16 @@ class WeComOrgSync:
         dept_id: str,
     ) -> None:
         """从企业微信数据中插入或更新单个用户。"""
-        wecom_user_id: Skill | None = user_data.get("userid", "")
+        wecom_user_id: str = user_data.get("userid", "")
 
         stmt: Any = select(UserModel).where(
             UserModel.wecom_user_id == wecom_user_id,
             UserModel.deleted_at.is_(None),
         )
-        result: ToolResult = await session.execute(stmt)
+        result: Any = await session.execute(stmt)
         existing: Any = result.scalar_one_or_none()
 
-        name: Skill | None = user_data.get("name", wecom_user_id)
+        name: str = user_data.get("name", wecom_user_id)
         email: Any = user_data.get("email") or user_data.get("biz_mail")
         phone: Any = user_data.get("mobile") or user_data.get("telephone")
 
@@ -165,7 +165,11 @@ class WeComOrgSync:
                 existing.email = email
             if phone:
                 existing.phone = phone
-            existing.department = user_data.get("department", [{}])[0] if user_data.get("department") else existing.department
+            existing.department = (
+                user_data.get("department", [{}])[0]
+                if user_data.get("department")
+                else existing.department
+            )
             existing.dept_id = dept_id
             existing.is_active = user_data.get("status", 1) == 1
         else:

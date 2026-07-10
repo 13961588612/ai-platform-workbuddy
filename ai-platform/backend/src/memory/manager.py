@@ -27,6 +27,7 @@ import httpx
 import structlog
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as qdrant_models
+from qdrant_client.http.models import PointStruct
 from sqlalchemy import delete, func, select
 
 from src.config import get_settings
@@ -280,10 +281,10 @@ class MemoryManager:
         now: Any = datetime.now(timezone.utc)
 
         for hit in user_level_results + session_level_results:
-            payload: Skill | None = hit.get("payload", {})
+            payload: dict[str, Any] = hit.get("payload", {})
             similarity: Any = hit.get("score", 0.0) or 0.0
             importance: float = float(payload.get("importance", 0.5))
-            created_at_str: Skill | None = payload.get("created_at", "")
+            created_at_str: str = payload.get("created_at", "")
             recency_factor: float = self._compute_recency_factor(created_at_str, now)
             composite: Any = importance * similarity * recency_factor
 
@@ -417,7 +418,9 @@ class MemoryManager:
         importance: Any = max(0.0, min(1.0, importance))
 
         # 确定 TTL
-        effective_ttl: Any = ttl_days if ttl_days is not None else self._settings.AGENT_MEMORY_TTL_DAYS
+        effective_ttl: Any = (
+            ttl_days if ttl_days is not None else self._settings.AGENT_MEMORY_TTL_DAYS
+        )
         expires_at: datetime | None = None
         if effective_ttl > 0:
             expires_at: Any = datetime.now(timezone.utc) + timedelta(days=effective_ttl)
@@ -618,7 +621,7 @@ class MemoryManager:
                 AgentMemory.expires_at.is_not(None),
                 AgentMemory.expires_at < now,
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             expired_ids: list[Any] = [row[0] for row in result.all()]
 
         if not expired_ids:
@@ -658,15 +661,14 @@ class MemoryManager:
                 AgentMemory.agent_name == agent_name,
                 AgentMemory.user_id == user_id,
             )
-            result: ToolResult = await session.execute(count_stmt)
+            result: Any = await session.execute(count_stmt)
             total: Any = result.scalar() or 0
 
             if total <= max_per_user:
                 return 0
 
-            # 计算驱逐分数并选择受害者
+            # 按 importance、created_at 升序淘汰超额记忆
             excess: Any = total - max_per_user
-            now: Any = datetime.now(timezone.utc)
             victim_stmt: Any = (
                 select(
                     AgentMemory.id,
@@ -680,7 +682,7 @@ class MemoryManager:
                 .order_by(AgentMemory.importance.asc(), AgentMemory.created_at.asc())
                 .limit(excess)
             )
-            victim_result: ToolResult = await session.execute(victim_stmt)
+            victim_result: Any = await session.execute(victim_stmt)
             victim_ids: list[Any] = [row[0] for row in victim_result.all()]
 
         if not victim_ids:
@@ -721,7 +723,7 @@ class MemoryManager:
                 .where(AgentMemory.user_id.is_not(None))
                 .group_by(AgentMemory.agent_name, AgentMemory.user_id)
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             pairs: Any = result.all()
 
         for agent_name, user_id in pairs:
@@ -743,7 +745,7 @@ class MemoryManager:
                 AgentMemory.session_id.is_not(None),
                 AgentMemory.importance >= _PROMOTION_THRESHOLD,
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             records: Any = result.scalars().all()
 
             if not records:
@@ -787,12 +789,12 @@ class MemoryManager:
             stmt: Any = select(AgentMemory).where(
                 AgentMemory.created_at < cutoff,
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             records: Any = result.scalars().all()
 
             for record in records:
                 meta: Any = record.metadata_ or {}
-                last_decay_str: Skill | None = meta.get(decay_key)
+                last_decay_str: str | None = meta.get(decay_key)
                 if last_decay_str:
                     try:
                         last_decay: Any = datetime.fromisoformat(last_decay_str)
@@ -828,7 +830,7 @@ class MemoryManager:
             stmt: Any = select(AgentMemory).where(
                 AgentMemory.session_id == session_id,
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             records: Any = result.scalars().all()
 
             for record in records:
@@ -894,15 +896,15 @@ class MemoryManager:
     @staticmethod
     def _payload_to_entry(payload: dict[str, Any], point_id: str) -> MemoryEntry:
         """将 Qdrant payload 字典转换为 :class:`MemoryEntry`。"""
-        memory_id: Skill | None = payload.get("memory_id", point_id)
-        memory_type_str: Skill | None = payload.get("memory_type", "context")
+        memory_id: str = payload.get("memory_id", point_id)
+        memory_type_str: str = payload.get("memory_type", "context")
         try:
             memory_type: MemoryType = MemoryType(memory_type_str)
         except ValueError:
             memory_type: Any = MemoryType.CONTEXT
 
-        session_id: Skill | None = payload.get("session_id")
-        expires_at_str: Skill | None = payload.get("expires_at")
+        session_id: str | None = payload.get("session_id")
+        expires_at_str: str | None = payload.get("expires_at")
         expires_at: datetime | None = None
         if expires_at_str:
             try:
@@ -910,7 +912,7 @@ class MemoryManager:
             except (ValueError, TypeError):
                 expires_at: None = None
 
-        created_at_str: Skill | None = payload.get("created_at", "")
+        created_at_str: str = payload.get("created_at", "")
         created_at: Any = datetime.now(timezone.utc)
         if created_at_str:
             try:

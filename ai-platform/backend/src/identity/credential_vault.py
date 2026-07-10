@@ -18,7 +18,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.user import CredentialMappingModel
-from src.utils.crypto import decrypt, encrypt_dict
+from src.utils.crypto import decrypt_dict, encrypt_dict
 
 logger = structlog.get_logger(__name__)
 
@@ -53,7 +53,7 @@ class CredentialVault:
             CredentialMappingModel.system_type == system_type,
             CredentialMappingModel.is_active.is_(True),
         )
-        result: ToolResult = await session.execute(stmt)
+        result: Any = await session.execute(stmt)
         existing: Any = result.scalar_one_or_none()
 
         if existing:
@@ -97,7 +97,7 @@ class CredentialVault:
             CredentialMappingModel.system_type == system_type,
             CredentialMappingModel.is_active.is_(True),
         )
-        result: ToolResult = await session.execute(stmt)
+        result: Any = await session.execute(stmt)
         mapping: Any = result.scalar_one_or_none()
         if not mapping:
             return None
@@ -131,7 +131,7 @@ class CredentialVault:
             )
             .values(is_active=False)
         )
-        result: ToolResult = await session.execute(stmt)
+        result: Any = await session.execute(stmt)
         return result.rowcount > 0  # type: ignore[union-attr]
 
     async def list_credentials(
@@ -144,7 +144,7 @@ class CredentialVault:
             CredentialMappingModel.user_id == user_id,
             CredentialMappingModel.is_active.is_(True),
         )
-        result: ToolResult = await session.execute(stmt)
+        result: Any = await session.execute(stmt)
         mappings: Any = result.scalars().all()
         return [m.to_dict() for m in mappings]
 
@@ -156,7 +156,7 @@ class CredentialVault:
         stmt: Any = select(CredentialMappingModel).where(
             CredentialMappingModel.is_active.is_(True),
         )
-        result: ToolResult = await session.execute(stmt)
+        result: Any = await session.execute(stmt)
         mappings: Any = result.scalars().all()
 
         count: int = 0

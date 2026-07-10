@@ -14,7 +14,8 @@ from src.config import get_settings
 from src.llm.deepseek_adapter import DeepSeekAdapter
 from src.llm.failover import FailoverManager, get_failover_manager
 from src.llm.key_manager import APIKeyManager, get_key_manager
-from src.llm.models import LLMChunk, LLMRequest, LLMResponse, TokenUsage
+from src.llm.models import APIKey, LLMChunk, LLMRequest, LLMResponse, TokenUsage
+from src.llm.openai_sdk_adapter import OpenAISDKAdapter
 from src.llm.outbound_proxy import OutboundProxyManager, get_proxy_manager
 from src.llm.qwen_adapter import QwenAdapter
 from src.llm.quota_manager import QuotaManager, get_quota_manager
@@ -22,7 +23,6 @@ from src.llm.token_tracker import TokenTracker, get_token_tracker
 from src.utils.exceptions import (
     FailoverExhaustedError,
     LLMProviderError,
-    QuotaExceededError,
 )
 from src.utils.logging import get_logger
 
@@ -57,7 +57,7 @@ class LLMGateway:
         self._proxy_manager: OutboundProxyManager = get_proxy_manager()
         self._token_tracker: TokenTracker = get_token_tracker()
         self._failover_manager: FailoverManager = get_failover_manager()
-        self._adapters: dict[str, Any] = {
+        self._adapters: dict[str, OpenAISDKAdapter] = {
             "deepseek": DeepSeekAdapter(),
             "qwen": QwenAdapter(),
         }
@@ -289,7 +289,7 @@ class LLMGateway:
         request: LLMRequest,
     ) -> LLMResponse:
         """通过 Key 和代理调用指定 provider 的适配器。"""
-        adapter: Skill | None = self._adapters.get(provider)
+        adapter: OpenAISDKAdapter | None = self._adapters.get(provider)
         if adapter is None:
             raise LLMProviderError(provider, f"Unknown provider: {provider}")
 
@@ -327,7 +327,7 @@ class LLMGateway:
         request: LLMRequest,
     ) -> AsyncIterator[LLMChunk]:
         """调用指定 provider 的流式适配器。"""
-        adapter: Skill | None = self._adapters.get(provider)
+        adapter: OpenAISDKAdapter | None = self._adapters.get(provider)
         if adapter is None:
             raise LLMProviderError(provider, f"Unknown provider: {provider}")
 

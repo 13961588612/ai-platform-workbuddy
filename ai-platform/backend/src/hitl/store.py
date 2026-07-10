@@ -164,7 +164,7 @@ class ApprovalStore:
             更新后的 ApprovalRecord，若未找到则返回 None。
         """
         async with self._lock:
-            record: Skill | None = self._records.get(approval_id)
+            record: ApprovalRecord | None = self._records.get(approval_id)
             if not record:
                 return None
             if record.status != ApprovalStatus.PENDING:

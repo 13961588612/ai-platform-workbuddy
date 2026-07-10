@@ -10,7 +10,6 @@ from dataclasses import dataclass
 import redis.asyncio as aioredis
 from redis.exceptions import ResponseError
 
-from src.config import get_settings
 from src.runtime.events import AgentEvent
 from src.utils.logging import get_logger
 
@@ -85,7 +84,7 @@ class StreamKeys:
 
 def parse_inbound_fields(fields: dict[str, str]) -> InboundStreamMessage:
     """将 Redis Stream 字段解析为 InboundStreamMessage。"""
-    metadata_raw: Skill | None = fields.get("metadata")
+    metadata_raw: str | None = fields.get("metadata")
     metadata: Any = json.loads(metadata_raw) if metadata_raw else None
     return InboundStreamMessage(
         id=fields.get("id", ""),

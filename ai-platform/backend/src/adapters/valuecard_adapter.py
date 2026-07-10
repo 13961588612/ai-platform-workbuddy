@@ -39,7 +39,10 @@ class ValueCardAdapter(BusinessSystemAdapter):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "card_type": {"type": "string", "description": "卡类型: standard/gift/virtual"},
+                        "card_type": {
+                            "type": "string",
+                            "description": "卡类型: standard/gift/virtual",
+                        },
                         "initial_value": {"type": "number", "description": "初始面值"},
                         "customer_name": {"type": "string", "description": "持卡人姓名"},
                         "customer_phone": {"type": "string", "description": "持卡人手机号"},
@@ -122,7 +125,10 @@ class ValueCardAdapter(BusinessSystemAdapter):
                     "type": "object",
                     "properties": {
                         "card_number": {"type": "string", "description": "卡号"},
-                        "status": {"type": "string", "description": "卡券状态: active/used/expired"},
+                        "status": {
+                            "type": "string",
+                            "description": "卡券状态: active/used/expired",
+                        },
                     },
                 },
                 required_permissions=["valuecard:coupon:read"],
@@ -180,18 +186,28 @@ class ValueCardAdapter(BusinessSystemAdapter):
             "query_card_rules": "/api/cards/rules",
         }
         if tool_name in get_tools:
-            data: dict[str, Any] = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "GET", get_tools[tool_name], credential, params=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "issue_card":
-            data: dict[str, Any] = await self._http_request("POST", "/api/cards/issue", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "POST", "/api/cards/issue", credential, json_body=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "recharge_card":
-            data: dict[str, Any] = await self._http_request("POST", "/api/cards/recharge", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "POST", "/api/cards/recharge", credential, json_body=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "refund_card":
-            data: dict[str, Any] = await self._http_request("POST", "/api/cards/refund", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "POST", "/api/cards/refund", credential, json_body=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "reconciliation":
-            data: dict[str, Any] = await self._http_request("POST", "/api/cards/reconciliation", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "POST", "/api/cards/reconciliation", credential, json_body=arguments
+            )
             return ToolResult(success=True, data=data)
         return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

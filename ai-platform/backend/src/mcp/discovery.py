@@ -99,7 +99,7 @@ class MCPDiscovery:
         category: str,
     ) -> Skill:
         """将原始 MCP 工具描述转换为 Skill。"""
-        tool_name: Skill | None = tool.get("name", "unknown")
+        tool_name: str = tool.get("name", "unknown")
         skill_id: str = f"mcp-{server_name}-{tool_name}"
 
         return Skill(

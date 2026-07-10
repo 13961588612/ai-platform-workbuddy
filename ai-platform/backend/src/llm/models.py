@@ -110,7 +110,9 @@ class LLMChunk(BaseModel):
     reasoning_content: str = Field(default="", description="推理/思考增量文本（DeepSeek 等）")
     role: str = Field(default="", description="数据块中的角色信息")
     finish_reason: str = Field(default="", description="生成停止原因")
-    usage: TokenUsage | None = Field(default=None, description="Token 用量（通常在最后一个数据块中）")
+    usage: TokenUsage | None = Field(
+        default=None, description="Token 用量（通常在最后一个数据块中）"
+    )
     index: int = Field(default=0, description="选项索引")
 
 

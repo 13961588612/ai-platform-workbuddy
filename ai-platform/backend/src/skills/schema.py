@@ -31,7 +31,7 @@ def _ensure_object_constraints(node: dict[str, Any]) -> None:
     if node.get("type") == "object" and "additionalProperties" not in node:
         node["additionalProperties"] = False
 
-    properties: Skill | None = node.get("properties")
+    properties: dict[str, Any] | None = node.get("properties")
     if not isinstance(properties, dict):
         return
     for prop_def in properties.values():

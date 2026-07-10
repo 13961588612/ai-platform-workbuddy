@@ -40,7 +40,10 @@ class HRAdapter(BusinessSystemAdapter):
                     "type": "object",
                     "properties": {
                         "employee_id": {"type": "string", "description": "员工工号"},
-                        "leave_type": {"type": "string", "description": "假期类型: annual/sick/personal"},
+                        "leave_type": {
+                            "type": "string",
+                            "description": "假期类型: annual/sick/personal",
+                        },
                     },
                     "required": ["employee_id"],
                 },
@@ -167,9 +170,13 @@ class HRAdapter(BusinessSystemAdapter):
             "query_training_records": "/api/training/records",
         }
         if tool_name in get_tools:
-            data: dict[str, Any] = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "GET", get_tools[tool_name], credential, params=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "apply_leave":
-            data: dict[str, Any] = await self._http_request("POST", "/api/leave/apply", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "POST", "/api/leave/apply", credential, json_body=arguments
+            )
             return ToolResult(success=True, data=data)
         return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

@@ -20,7 +20,15 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from src.config import get_settings
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from src.agent.manager import AgentManager
+from src.config import Settings, get_settings
+from src.config_manager.manager import ConfigManager
+from src.hitl.approval import ApprovalManager
+from src.llm.gateway import LLMGateway
+from src.push.scheduler import PushScheduler
+from src.router.agent_router import AgentRouter
 from src.utils.logging import configure_logging
 
 # ===== 生命周期管理 =====
@@ -228,7 +236,10 @@ def create_app() -> FastAPI:
 
     app: FastAPI = FastAPI(
         title="AI Platform — Agent Core",
-        description="企业内部 AI 平台后端服务 — Agent 生命周期管理、智能路由、LLM 网关、Skills 调度",
+        description=(
+            "企业内部 AI 平台后端服务 — "
+            "Agent 生命周期管理、智能路由、LLM 网关、Skills 调度"
+        ),
         version=settings.APP_VERSION,
         docs_url="/docs" if not settings.is_production else None,
         redoc_url="/redoc" if not settings.is_production else None,
@@ -251,7 +262,7 @@ def create_app() -> FastAPI:
         """为每个请求注入 traceId 以支持分布式追踪。"""
         import uuid
 
-        trace_id: Skill | None = request.headers.get("X-Trace-Id", str(uuid.uuid4()))
+        trace_id: str = request.headers.get("X-Trace-Id", str(uuid.uuid4()))
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(
             trace_id=trace_id,

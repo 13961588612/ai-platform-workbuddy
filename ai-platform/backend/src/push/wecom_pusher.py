@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 import httpx
 from pydantic import BaseModel
 
-from src.config import get_settings
+from src.config import Settings, get_settings
 from src.push.models import (
     PushMessage,
     PushMessageStatus,
@@ -113,7 +113,7 @@ class WecomPusher:
             )
             client: httpx.AsyncClient = self._get_http_client()
             try:
-                response: Skill | None = await client.get(url)
+                response: httpx.Response = await client.get(url)
                 response.raise_for_status()
                 data: Any = response.json()
             except httpx.HTTPError as exc:
@@ -130,8 +130,8 @@ class WecomPusher:
                     f"WeChat Work API error: {data.get('errcode')} - {data.get('errmsg')}"
                 )
 
-            token: Skill | None = data.get("access_token", "")
-            expires_in: Skill | None = data.get("expires_in", TOKEN_CACHE_TTL_SECONDS)
+            token: str = data.get("access_token", "")
+            expires_in: int = data.get("expires_in", TOKEN_CACHE_TTL_SECONDS)
             self._token_cache = WecomTokenCache(
                 access_token=token,
                 expires_at=datetime.now(timezone.utc)

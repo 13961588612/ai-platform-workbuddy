@@ -16,7 +16,6 @@ from pathlib import Path
 import yaml
 from sqlalchemy import select
 
-from src.agent.config import AgentConfig
 from src.config import get_settings
 from src.db.session import db_session_context
 from src.models.agent import AgentConfigModel
@@ -60,7 +59,7 @@ class ConfigSync:
             logger.error("Failed to parse YAML for sync", agent_id=agent_id, error=str(exc))
             return
 
-        agent_section: Skill | None = config_data.get("agent", config_data)
+        agent_section: dict[str, Any] = config_data.get("agent", config_data)
         config_json: str = json.dumps(config_data, ensure_ascii=False)
 
         # 如果存在则加载 metadata
@@ -70,14 +69,14 @@ class ConfigSync:
             with open(metadata_yaml, encoding="utf-8") as f:
                 metadata_str: Any = f.read()
 
-        routing: Skill | None = agent_section.get("routing", {})
+        routing: dict[str, Any] = agent_section.get("routing", {})
 
         async with db_session_context() as session:
             # 检查记录是否已存在
             stmt: Any = select(AgentConfigModel).where(
                 AgentConfigModel.agent_id == agent_id
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             existing: Any = result.scalar_one_or_none()
 
             if existing:
@@ -130,7 +129,7 @@ class ConfigSync:
                 AgentConfigModel.agent_id == agent_id,
                 AgentConfigModel.is_deleted == False,  # noqa: E712
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             row: Any = result.scalar_one_or_none()
 
         if row is None:
@@ -193,7 +192,7 @@ class ConfigSync:
                 AgentConfigModel.is_deleted == False,  # noqa: E712
                 AgentConfigModel.is_active == True,  # noqa: E712
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             rows: Any = result.scalars().all()
 
         count: int = 0

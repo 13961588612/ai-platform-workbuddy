@@ -16,17 +16,17 @@ from typing import Any
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from src.api.deps import get_current_user, get_trace_id
-from src.api.response import error_response, success, success_response
-from src.config import get_settings
-from src.hitl.approval import get_approval_manager
+from src.api.response import error_response, success
+from src.hitl.approval import ApprovalManager, get_approval_manager
 from src.hitl.store import ApprovalStatus
 from src.push.models import PushMessage, PushMessageStatus, PushMessageType
-from src.push.scheduler import get_push_scheduler
-from src.push.wecom_pusher import get_wecom_pusher
+from src.push.scheduler import PushScheduler, get_push_scheduler
+from src.push.wecom_pusher import WecomPusher, get_wecom_pusher
+from src.router.models import RouteStats
 from src.utils.logging import get_logger
 
 logger = get_logger("api.routes.push")
@@ -209,7 +209,7 @@ async def respond_to_approval(
     """响应审批请求（批准/拒绝）。"""
     try:
         manager: ApprovalManager = get_approval_manager()
-        current_user_id: Skill | None = user.get("user_id", "")
+        current_user_id: str = user.get("user_id", "")
 
         record: dict[str, Any] = await manager.respond_to_approval(
             approval_id=approval_id,
@@ -408,7 +408,11 @@ async def send_push_message(
                 "sentAt": result.sent_at.isoformat() if result.sent_at else None,
                 "error": result.error,
             },
-            message="Push message sent" if result.status == PushMessageStatus.SENT else "Push message failed",
+            message=(
+                "Push message sent"
+                if result.status == PushMessageStatus.SENT
+                else "Push message failed"
+            ),
             trace_id=trace_id,
         )
     except Exception as exc:

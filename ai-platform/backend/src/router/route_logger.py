@@ -12,7 +12,6 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.session import db_session_context
 from src.models.session import RouteLogModel
@@ -100,7 +99,7 @@ class RouteLogger:
                 stmt: Any = stmt.where(RouteLogModel.timestamp <= filter_obj.end_time)
 
             stmt: Any = stmt.limit(filter_obj.limit).offset(filter_obj.offset)
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             rows: Any = result.scalars().all()
 
         return [
@@ -140,7 +139,7 @@ class RouteLogger:
             if end_time:
                 stmt: Any = stmt.where(RouteLogModel.timestamp <= end_time)
 
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             rows: Any = result.scalars().all()
 
         if not rows:

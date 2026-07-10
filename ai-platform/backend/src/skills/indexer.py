@@ -17,6 +17,8 @@ from qdrant_client.http import models as qdrant_models
 from src.config import get_settings
 
 if TYPE_CHECKING:
+    from qdrant_client.http.models import PointStruct
+
     from src.skills.models import Skill
 
 logger = structlog.get_logger(__name__)
@@ -112,10 +114,18 @@ class VectorIndexer:
                 "skill_id": skill.skill_id,
                 "name": skill.name,
                 "category": skill.category,
-                "status": skill.status.value if hasattr(skill.status, "value") else str(skill.status),
+                "status": (
+                    skill.status.value
+                    if hasattr(skill.status, "value")
+                    else str(skill.status)
+                ),
                 "version": skill.version,
                 "tags": skill.tags,
-                "source": skill.source.value if hasattr(skill.source, "value") else str(skill.source),
+                "source": (
+                    skill.source.value
+                    if hasattr(skill.source, "value")
+                    else str(skill.source)
+                ),
             },
         )
         await self._qdrant.upsert(

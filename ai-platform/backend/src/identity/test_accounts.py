@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
-from src.config import get_settings
+from src.config import Settings, get_settings
 from src.utils.logging import get_logger
 
 logger = get_logger("identity.test_accounts")
@@ -88,7 +88,7 @@ class TestAccountStore:
         """
         if not get_settings().DEV_TEST_ACCOUNTS_ENABLED:
             return None
-        account: Skill | None = self._by_username.get(username)
+        account: TestAccount | None = self._by_username.get(username)
         if account is None or account.password != password:
             return None
         return account

@@ -118,7 +118,7 @@ class SkillRetriever:
                 skill: Skill | None = self._registry.get(skill_id)
             if skill is None:
                 # 回退：从 payload 构建最小化 Skill
-                payload: Skill | None = hit.get("payload", {})
+                payload: dict[str, Any] = hit.get("payload", {})
                 skill: Skill = Skill(
                     skill_id=skill_id,
                     name=payload.get("name", skill_id),

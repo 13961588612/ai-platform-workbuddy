@@ -16,7 +16,6 @@ from src.config_manager.loader import ConfigLoader, get_config_loader
 from src.config_manager.sync import ConfigSync, get_config_sync
 from src.config_manager.validator import ConfigValidator, get_config_validator
 from src.config_manager.watcher import ConfigWatcher, get_config_watcher
-from src.utils.exceptions import ConfigValidationError
 from src.utils.logging import get_logger
 
 logger = get_logger("config_manager.manager")
@@ -274,7 +273,7 @@ class ConfigManager:
             stmt: Any = select(AgentConfigModel).where(
                 AgentConfigModel.agent_id == config.agent_id
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             existing: Any = result.scalar_one_or_none()
 
             if existing:
@@ -326,7 +325,7 @@ class ConfigManager:
             stmt: Any = select(AgentConfigModel).where(
                 AgentConfigModel.agent_id == agent_id
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             record: Any = result.scalar_one_or_none()
             if record:
                 record.is_deleted = True

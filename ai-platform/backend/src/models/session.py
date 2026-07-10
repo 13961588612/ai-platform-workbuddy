@@ -53,7 +53,9 @@ class SessionModel(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
             "state": self.state,
             "runtime_type": self.runtime_type,
             "metadata": self.metadata_,
-            "last_activity_at": self.last_activity_at.isoformat() if self.last_activity_at else None,
+            "last_activity_at": (
+                self.last_activity_at.isoformat() if self.last_activity_at else None
+            ),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

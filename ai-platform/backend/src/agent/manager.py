@@ -13,12 +13,12 @@ from datetime import datetime, timezone
 from src.agent.config import AgentConfig
 from src.agent.lifecycle import InstanceState, LifecycleEvent, LifecycleStateMachine
 from src.agent.runtime_setup import wire_agent_runtime
-from src.agent.session import Message, Session, get_session_manager
+from src.agent.session import Message, Session
 from src.runtime.base import AgentRuntime
 from src.runtime.events import AgentEvent, HealthStatus
 from src.runtime.factory import create_runtime
 from src.runtime.registry import get_runtime_registry
-from src.utils.exceptions import AgentNotFoundError, AgentNotRunningError, AgentStateError
+from src.utils.exceptions import AgentNotFoundError, AgentNotRunningError
 from src.utils.logging import get_logger
 
 logger = get_logger("agent.manager")
@@ -271,7 +271,7 @@ class AgentManager:
             try:
                 await self.create_agent(config)
             except AgentAlreadyExistsError:
-                instance: Skill | None = self._instances.get(config.agent_id)
+                instance: AgentInstance | None = self._instances.get(config.agent_id)
                 if instance is not None:
                     await self.update_config(config.agent_id, config)
             except Exception as exc:
@@ -282,9 +282,9 @@ class AgentManager:
                 )
                 continue
 
-            if config.agent_id in self._instances:
-                instance: Any = self._instances[config.agent_id]
-                if not instance.lifecycle.is_active():
+            synced_instance: AgentInstance | None = self._instances.get(config.agent_id)
+            if synced_instance is not None:
+                if not synced_instance.lifecycle.is_active():
                     await self.start_agent(config.agent_id)
                 synced += 1
 
@@ -297,7 +297,7 @@ class AgentManager:
 
         若启动时未同步成功，在首次发消息时从 ConfigManager 懒加载并启动。
         """
-        instance: Skill | None = self._instances.get(agent_id)
+        instance: AgentInstance | None = self._instances.get(agent_id)
         if instance is not None:
             if not instance.lifecycle.is_active():
                 await self.start_agent(agent_id)
@@ -333,7 +333,7 @@ class AgentManager:
 
     def _get_instance(self, agent_id: str) -> AgentInstance:
         """获取实例，若不存在则抛出 AgentNotFoundError。"""
-        instance: Skill | None = self._instances.get(agent_id)
+        instance: AgentInstance | None = self._instances.get(agent_id)
         if instance is None:
             raise AgentNotFoundError(agent_id)
         return instance

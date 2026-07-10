@@ -9,8 +9,6 @@ from __future__ import annotations
 from typing import Any
 
 import asyncio
-import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 from src.config import get_settings
@@ -126,7 +124,7 @@ class ConfigWatcher:
                 stmt: Any = select(AgentConfigModel.agent_id, AgentConfigModel.updated_at).where(
                     AgentConfigModel.is_deleted == False,  # noqa: E712
                 )
-                result: ToolResult = await session.execute(stmt)
+                result: Any = await session.execute(stmt)
                 for row in result:
                     self._db_versions[row[0]] = row[1].isoformat() if row[1] else ""
         except Exception as exc:
@@ -158,7 +156,7 @@ class ConfigWatcher:
 
         # 检查新增或更新的配置
         for agent_id, mtime in current_mtimes.items():
-            old_mtime: Skill | None = self._file_mtimes.get(agent_id)
+            old_mtime: float | None = self._file_mtimes.get(agent_id)
             if old_mtime is None:
                 self._notify_change(agent_id, "created")
             elif mtime > old_mtime:
@@ -186,7 +184,7 @@ class ConfigWatcher:
                     AgentConfigModel.updated_at,
                     AgentConfigModel.is_deleted,
                 )
-                result: ToolResult = await session.execute(stmt)
+                result: Any = await session.execute(stmt)
                 for row in result:
                     agent_id: Any = row[0]
                     version: str = row[1].isoformat() if row[1] else ""
@@ -201,7 +199,7 @@ class ConfigWatcher:
 
         # 与之前的快照进行比较
         for agent_id, version in current_versions.items():
-            old_version: Skill | None = self._db_versions.get(agent_id)
+            old_version: str | None = self._db_versions.get(agent_id)
             if old_version is None:
                 if version != "deleted":
                     self._notify_change(agent_id, "created")

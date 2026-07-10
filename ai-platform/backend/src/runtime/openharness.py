@@ -26,6 +26,7 @@ from src.utils.logging import get_logger
 
 try:
     from openharness.engine.messages import ConversationMessage, TextBlock
+    from openharness.engine.query_engine import QueryEngine
     from openharness.engine.stream_events import (
         AssistantTextDelta,
         AssistantTurnComplete,
@@ -39,10 +40,57 @@ try:
 except ImportError:  # pragma: no cover
     _OPENHARNESS_AVAILABLE = False
     McpClientManager = None  # type: ignore[misc, assignment]
+    QueryEngine = None  # type: ignore[misc, assignment]
 
 logger = get_logger("runtime.openharness")
 
 _TRACE_LOG_LIMIT = 1000
+
+
+def _mcp_manager_has_tools(manager: McpClientManager | None) -> bool:
+    """判断 MCP 管理器是否已连接并暴露至少一个工具。"""
+    if manager is None:
+        return False
+    return any(status.state == "connected" and status.tools for status in manager.list_statuses())
+
+
+async def _ensure_native_mcp_manager(
+    current: McpClientManager | None,
+    agent_config: AgentConfig,
+) -> McpClientManager:
+    """确保拿到可用的 MCP 管理器；无工具时关闭并重连。
+
+    OpenHarness ``connect_all`` 失败时不抛异常，只会把状态标为 failed。
+    Agent 启动时若 MCP 未就绪，会缓存一个空管理器，导致后续请求永远只有
+    ``skill`` 工具。此处在无已连接工具时强制重连。
+    """
+    if _mcp_manager_has_tools(current):
+        return current  # type: ignore[return-value]
+
+    if current is not None:
+        try:
+            await current.close()
+        except Exception as exc:
+            logger.warning("Failed to close stale MCP manager", error=str(exc))
+
+    manager: McpClientManager = await connect_mcp_manager(agent_config)
+    statuses: list[dict[str, Any]] = [
+        {
+            "name": status.name,
+            "state": status.state,
+            "detail": status.detail,
+            "tools": len(status.tools),
+        }
+        for status in manager.list_statuses()
+    ]
+    logger.info(
+        "MCP manager ready",
+        agent_id=agent_config.agent_id,
+        has_tools=_mcp_manager_has_tools(manager),
+        statuses=statuses,
+    )
+    return manager
+
 
 
 def _agent_trace_enabled() -> bool:
@@ -107,8 +155,8 @@ def _platform_messages_to_conversation(messages: list[dict[str, Any]]) -> list[A
         return []
     result: list[ConversationMessage] = []
     for msg in messages:
-        role: Skill | None = msg.get("role", "user")
-        content: Skill | None = msg.get("content", "")
+        role: str = msg.get("role", "user")
+        content: str = msg.get("content", "")
         if role == "assistant":
             result.append(
                 ConversationMessage(role="assistant", content=[TextBlock(text=str(content or ""))])
@@ -233,7 +281,9 @@ class OpenHarnessRuntime(AgentRuntime):
             "",
         )
 
-        skill_dirs: list[str] = resolve_extra_skill_dirs(agent_config, Path(get_settings().CONFIG_BASE_PATH))
+        skill_dirs: list[str] = resolve_extra_skill_dirs(
+            agent_config, Path(get_settings().CONFIG_BASE_PATH)
+        )
         _log_agent_trace(
             session_id,
             step=0,
@@ -248,8 +298,10 @@ class OpenHarnessRuntime(AgentRuntime):
         step: int = 0
 
         try:
-            if self._native_mcp_manager is None:
-                self._native_mcp_manager = await connect_mcp_manager(agent_config)
+            self._native_mcp_manager = await _ensure_native_mcp_manager(
+                self._native_mcp_manager,
+                agent_config,
+            )
 
             engine: QueryEngine = await build_native_query_engine(
                 agent_config,

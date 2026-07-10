@@ -15,7 +15,10 @@ from pydantic import BaseModel, Field
 class RuntimeConfig(BaseModel):
     """Agent 的运行时类型与参数。"""
 
-    type: str = Field(default="openharness", description="运行时类型：openharness | custom | langgraph")
+    type: str = Field(
+        default="openharness",
+        description="运行时类型：openharness | custom | langgraph",
+    )
     version: str = Field(default="1.0.0")
     params: dict[str, Any] = Field(
         default_factory=lambda: {
@@ -28,7 +31,10 @@ class RuntimeConfig(BaseModel):
     middleware: dict[str, Any] = Field(default_factory=dict)
     allowed_tools: list[str] = Field(
         default_factory=list,
-        description="OpenHarness 工具白名单；支持 glob（如 mcp__*）。空则使用平台默认 skill + mcp__*",
+        description=(
+            "OpenHarness 工具白名单；支持 glob（如 mcp__*）。"
+            "空则使用平台默认 skill + mcp__*"
+        ),
     )
 
 
@@ -154,10 +160,10 @@ class AgentConfig(BaseModel):
 
         处理配置文件中的嵌套 YAML 结构。
         """
-        agent_section: Skill | None = data.get("agent", data)
+        agent_section: dict[str, Any] = data.get("agent", data)
 
         # Parse runtime section
-        runtime_data: Skill | None = agent_section.get("runtime", data.get("runtime", {}))
+        runtime_data: dict[str, Any] = agent_section.get("runtime", data.get("runtime", {}))
         runtime: RuntimeConfig = RuntimeConfig(
             type=runtime_data.get("type", "openharness"),
             version=runtime_data.get("version", "1.0.0"),
@@ -168,7 +174,7 @@ class AgentConfig(BaseModel):
         )
 
         # Parse model section
-        model_data: Skill | None = agent_section.get("model", data.get("model", {}))
+        model_data: dict[str, Any] = agent_section.get("model", data.get("model", {}))
         model: ModelConfig = ModelConfig(
             primary=model_data.get("primary", "deepseek-v4-flash"),
             fallback=model_data.get("fallback", "qwen3.6-plus"),
@@ -177,7 +183,7 @@ class AgentConfig(BaseModel):
         )
 
         # Parse routing section
-        routing_data: Skill | None = agent_section.get("routing", data.get("routing", {}))
+        routing_data: dict[str, Any] = agent_section.get("routing", data.get("routing", {}))
         routing: RoutingConfig = RoutingConfig(
             keywords=routing_data.get("keywords", []),
             enabled=routing_data.get("enabled", True),
@@ -185,9 +191,9 @@ class AgentConfig(BaseModel):
         )
 
         # Parse memory section
-        memory_data: Skill | None = agent_section.get("memory", data.get("memory", {}))
-        static_data: Skill | None = memory_data.get("static", {})
-        dynamic_data: Skill | None = memory_data.get("dynamic", {})
+        memory_data: dict[str, Any] = agent_section.get("memory", data.get("memory", {}))
+        static_data: dict[str, Any] = memory_data.get("static", {})
+        dynamic_data: dict[str, Any] = memory_data.get("dynamic", {})
         memory: MemoryConfig = MemoryConfig(
             static_enabled=static_data.get("enabled", True),
             personality_file=static_data.get("personality", "memory/personality.md"),
@@ -201,12 +207,14 @@ class AgentConfig(BaseModel):
         )
 
         # Parse includes
-        includes: Skill | None = agent_section.get("includes", {})
+        includes: dict[str, Any] = agent_section.get("includes", {})
 
         # Parse enabled skills (from skills/enabled-skills.yaml merged by ConfigLoader)
         skills: list[SkillRef] = []
-        skills_data: Skill | None = data.get("skills", agent_section.get("skills", {}))
-        enabled_list: Skill | None | list[Any] = skills_data.get("enabled", []) if isinstance(skills_data, dict) else []
+        skills_data: dict[str, Any] = data.get("skills", agent_section.get("skills", {}))
+        enabled_list: list[Any] = (
+            skills_data.get("enabled", []) if isinstance(skills_data, dict) else []
+        )
         for item in enabled_list:
             if not isinstance(item, dict) or not item.get("skill_id"):
                 continue
@@ -238,7 +246,7 @@ class AgentConfig(BaseModel):
                 )
             )
 
-        system_prompt: Skill | None = data.get("system_prompt", agent_section.get("system_prompt", ""))
+        system_prompt: str = data.get("system_prompt", agent_section.get("system_prompt", ""))
 
         return cls(
             agent_id=agent_section.get("name", ""),

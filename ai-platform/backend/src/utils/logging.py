@@ -14,7 +14,7 @@ from pathlib import Path
 
 import structlog
 
-from src.config import LogLevel, get_settings
+from src.config import LogLevel, Settings, get_settings
 
 # 日志输出中应脱敏的字段
 SENSITIVE_FIELDS = frozenset({

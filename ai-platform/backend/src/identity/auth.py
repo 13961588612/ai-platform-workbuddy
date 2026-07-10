@@ -62,7 +62,7 @@ class WeComClient:
         url: str = f"{self._base_url}/gettoken"
         params: dict[str, Any] = {"corpid": self._corp_id, "corpsecret": self._secret}
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp: Skill | None = await client.get(url, params=params)
+            resp: httpx.Response = await client.get(url, params=params)
             resp.raise_for_status()
             data: Any = resp.json()
 
@@ -81,7 +81,7 @@ class WeComClient:
         url: str = f"{self._base_url}/auth/getuserinfo"
         params: dict[str, Any] = {"access_token": access_token, "code": code}
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp: Skill | None = await client.get(url, params=params)
+            resp: httpx.Response = await client.get(url, params=params)
             resp.raise_for_status()
             data: Any = resp.json()
 
@@ -101,7 +101,7 @@ class WeComClient:
         url: str = f"{self._base_url}/user/get"
         params: dict[str, Any] = {"access_token": access_token, "userid": userid}
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp: Skill | None = await client.get(url, params=params)
+            resp: httpx.Response = await client.get(url, params=params)
             resp.raise_for_status()
             data: Any = resp.json()
         if data.get("errcode", 0) != 0:
@@ -115,7 +115,7 @@ class WeComClient:
         url: str = f"{self._base_url}/department/list"
         params: dict[str, Any] = {"access_token": access_token}
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp: Skill | None = await client.get(url, params=params)
+            resp: httpx.Response = await client.get(url, params=params)
             resp.raise_for_status()
             data: Any = resp.json()
         if data.get("errcode", 0) != 0:
@@ -126,9 +126,13 @@ class WeComClient:
         """获取企业微信部门中的所有用户。"""
         access_token: str = await self.get_access_token()
         url: str = f"{self._base_url}/user/list"
-        params: dict[str, Any] = {"access_token": access_token, "department_id": dept_id, "fetch_child": 0}
+        params: dict[str, Any] = {
+            "access_token": access_token,
+            "department_id": dept_id,
+            "fetch_child": 0,
+        }
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp: Skill | None = await client.get(url, params=params)
+            resp: httpx.Response = await client.get(url, params=params)
             resp.raise_for_status()
             data: Any = resp.json()
         if data.get("errcode", 0) != 0:

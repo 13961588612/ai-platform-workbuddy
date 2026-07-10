@@ -15,6 +15,7 @@ from openai import APIStatusError
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 
 from src.llm.models import LLMChunk, LLMRequest, LLMResponse, TokenUsage
+from src.runtime.base import AgentRuntime
 from src.utils.exceptions import LLMProviderError
 
 

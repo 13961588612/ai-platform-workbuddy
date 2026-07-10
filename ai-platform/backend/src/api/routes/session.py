@@ -13,9 +13,10 @@ from __future__ import annotations
 from typing import Any
 
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
+from src.agent.manager import AgentInstance
 from src.agent.session import SessionManager
 from src.api.deps import (
     get_agent_manager_dep,
@@ -219,7 +220,7 @@ async def send_message(
             if event.type == AgentEventType.TEXT_DELTA and event.content:
                 response_parts.append(event.content)
             elif event.type == AgentEventType.TOOL_RESULT and event.result:
-                err: Skill | None = event.result.get("error")
+                err: Any | None = event.result.get("error")
                 if err:
                     tool_errors.append(f"{event.tool_name}: {err}")
             elif event.type == AgentEventType.ERROR:

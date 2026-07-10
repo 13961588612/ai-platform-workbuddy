@@ -18,20 +18,17 @@ from __future__ import annotations
 from typing import Any
 
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
 from src.agent.config import AgentConfig
-from src.agent.lifecycle import InstanceState
 from src.agent.manager import AgentManager
 from src.api.deps import get_agent_manager_dep, get_config_manager_dep, get_current_user
-from src.api.response import error_response, success, success_response
+from src.api.response import error_response, success
 from src.config_manager.manager import ConfigManager
-from src.runtime.events import HealthStatus
 from src.utils.exceptions import (
     AgentAlreadyExistsError,
     AgentNotFoundError,
-    AgentNotRunningError,
     AgentStateError,
     ConfigValidationError,
 )
@@ -123,11 +120,7 @@ async def create_agent(
     try:
         # 从请求构建 AgentConfig
         from src.agent.config import (
-            AccessControl,
-            MCPServerConfig,
-            MemoryConfig,
             ModelConfig,
-            PushConfig,
             RoutingConfig,
             RuntimeConfig,
         )

@@ -5,6 +5,8 @@ from typing import Any
 
 from pathlib import Path
 
+from openharness.mcp.client import McpClientManager
+
 from src.agent.config import AgentConfig
 from src.config import get_settings
 from src.runtime.base import AgentRuntime
@@ -27,7 +29,25 @@ async def wire_agent_runtime(runtime: AgentRuntime, config: AgentConfig) -> dict
         try:
             mcp_manager: McpClientManager = await connect_mcp_manager(config)
             runtime.set_native_mcp_manager(mcp_manager)
-            mcp_connected: Any = len(config.mcp_servers)
+            mcp_connected = sum(
+                1
+                for status in mcp_manager.list_statuses()
+                if status.state == "connected" and status.tools
+            )
+            if config.mcp_servers and mcp_connected == 0:
+                logger.warning(
+                    "MCP servers configured but none connected with tools",
+                    agent_id=config.agent_id,
+                    configured=len(config.mcp_servers),
+                    statuses=[
+                        {
+                            "name": status.name,
+                            "state": status.state,
+                            "detail": status.detail,
+                        }
+                        for status in mcp_manager.list_statuses()
+                    ],
+                )
         except Exception as exc:
             logger.warning(
                 "Native OpenHarness MCP connect failed",

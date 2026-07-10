@@ -86,7 +86,7 @@ class StaticMemoryLoader:
             组装后的静态记忆文本。如果 agent 没有记忆文件，
             则返回空字符串。
         """
-        cached: Skill | None = self._cache.get(agent_name)
+        cached: _CachedStaticMemory | None = self._cache.get(agent_name)
         if cached is not None:
             return cached.content
 
@@ -121,7 +121,7 @@ class StaticMemoryLoader:
             return False
 
         current_mtime: float = self._max_mtime(watched_files)
-        cached: Skill | None = self._cache.get(agent_name)
+        cached: _CachedStaticMemory | None = self._cache.get(agent_name)
         if cached is None or current_mtime > cached.mtime:
             # 使其失效；下一次 load() 会重新读取
             self._cache.pop(agent_name, None)
@@ -334,7 +334,7 @@ class StaticMemoryLoader:
 
         返回字段名称列表（默认为 ``["personality", "facts"]``）。
         """
-        fields: Skill | None = entry_data.get("fields", [])
+        fields: list[Any] = entry_data.get("fields", [])
         if isinstance(fields, list):
             return [str(f) for f in fields]
         return ["personality", "facts"]

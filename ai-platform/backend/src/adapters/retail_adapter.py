@@ -116,7 +116,11 @@ class RetailAdapter(BusinessSystemAdapter):
                     "properties": {
                         "supplier_id": {"type": "string", "description": "供应商ID"},
                         "store_id": {"type": "string", "description": "收货门店ID"},
-                        "items": {"type": "array", "items": {"type": "object"}, "description": "采购商品列表"},
+                        "items": {
+                            "type": "array",
+                            "items": {"type": "object"},
+                            "description": "采购商品列表",
+                        },
                     },
                     "required": ["supplier_id", "store_id", "items"],
                 },
@@ -142,22 +146,34 @@ class RetailAdapter(BusinessSystemAdapter):
             包含零售 API 响应数据或错误信息的 ``ToolResult``。
         """
         if tool_name == "query_products":
-            data: dict[str, Any] = await self._http_request("GET", "/api/products", credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "GET", "/api/products", credential, params=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "query_inventory":
-            data: dict[str, Any] = await self._http_request("GET", "/api/inventory", credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "GET", "/api/inventory", credential, params=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "query_promotions":
-            data: dict[str, Any] = await self._http_request("GET", "/api/promotions", credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "GET", "/api/promotions", credential, params=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "query_sales_report":
-            data: dict[str, Any] = await self._http_request("GET", "/api/sales/report", credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "GET", "/api/sales/report", credential, params=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "query_supply_chain":
-            data: dict[str, Any] = await self._http_request("GET", "/api/supply-chain", credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "GET", "/api/supply-chain", credential, params=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "create_purchase_order":
-            data: dict[str, Any] = await self._http_request("POST", "/api/purchase-orders", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "POST", "/api/purchase-orders", credential, json_body=arguments
+            )
             return ToolResult(success=True, data=data)
         else:
             return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

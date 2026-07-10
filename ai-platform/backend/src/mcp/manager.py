@@ -69,7 +69,7 @@ class MCPManager:
 
     async def connect(self, name: str) -> MCPClient:
         """建立到已注册 MCP Server 的连接。"""
-        config: Skill | None = self._configs.get(name)
+        config: MCPServerConfig | None = self._configs.get(name)
         if not config:
             raise MCPClientError(f"MCP server '{name}' is not registered")
 
@@ -164,7 +164,7 @@ class MCPManager:
 
     async def _get_connected_client(self, name: str) -> MCPClient:
         """返回 *name* 对应的已连接客户端，必要时自动连接。"""
-        client: Skill | None = self._clients.get(name)
+        client: MCPClient | None = self._clients.get(name)
         if client and client.is_connected:
             return client
         return await self.connect(name)

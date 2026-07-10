@@ -10,8 +10,7 @@ from typing import Any
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from src.db.session import db_session_context
 from src.llm.models import TokenUsage
@@ -115,7 +114,7 @@ class TokenTracker:
                 stmt: Any = stmt.where(TokenUsageModel.timestamp <= end_time)
 
             stmt: Any = stmt.limit(limit).offset(offset)
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             rows: Any = result.scalars().all()
 
         return [
@@ -159,7 +158,7 @@ class TokenTracker:
             if end_time:
                 stmt: Any = stmt.where(TokenUsageModel.timestamp <= end_time)
 
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             rows: Any = result.scalars().all()
 
         if not rows:

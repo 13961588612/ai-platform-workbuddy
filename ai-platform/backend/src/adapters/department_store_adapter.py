@@ -168,6 +168,8 @@ class DepartmentStoreAdapter(BusinessSystemAdapter):
             method: str
             path: str
             method, path = route_map[tool_name]
-            data: dict[str, Any] = await self._http_request(method, path, credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(
+                method, path, credential, params=arguments
+            )
             return ToolResult(success=True, data=data)
         return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

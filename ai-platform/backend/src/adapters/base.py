@@ -153,7 +153,7 @@ class BusinessSystemAdapter(ABC):
             return False
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
-                resp: Skill | None = await client.get(f"{self._base_url}/health")
+                resp: httpx.Response = await client.get(f"{self._base_url}/health")
                 return resp.status_code < 500
         except Exception:
             return False
@@ -179,8 +179,8 @@ class BusinessSystemAdapter(ABC):
             token: Any = credential.get("token") or credential.get("api_key")
             if token:
                 headers["Authorization"] = f"Bearer {token}"
-            username: Skill | None = credential.get("username")
-            password: Skill | None = credential.get("password")
+            username: str | None = credential.get("username")
+            password: str | None = credential.get("password")
             if username and password:
                 import base64
 

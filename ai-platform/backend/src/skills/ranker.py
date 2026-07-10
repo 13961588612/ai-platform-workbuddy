@@ -18,7 +18,7 @@ SkillRanker — 两阶段检索引擎的第二阶段。
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING
 
 import structlog

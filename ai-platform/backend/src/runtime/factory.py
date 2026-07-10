@@ -55,19 +55,19 @@ class OpenHarnessFactory:
 
         # Validate runtime params
         params: Any = getattr(runtime, "params", {}) or {}
-        max_steps: Skill | None = params.get("maxSteps")
+        max_steps: int | None = params.get("maxSteps")
         if max_steps is not None:
             if not isinstance(max_steps, int) or max_steps < 1:
                 logger.warning("Invalid maxSteps", value=max_steps)
                 return False
 
-        temperature: Skill | None = params.get("temperature")
+        temperature: float | None = params.get("temperature")
         if temperature is not None:
             if not isinstance(temperature, int | float) or temperature < 0 or temperature > 2:
                 logger.warning("Invalid temperature", value=temperature)
                 return False
 
-        max_tokens: Skill | None = params.get("maxTokens")
+        max_tokens: int | None = params.get("maxTokens")
         if max_tokens is not None:
             if not isinstance(max_tokens, int) or max_tokens < 1:
                 logger.warning("Invalid maxTokens", value=max_tokens)

@@ -59,7 +59,7 @@ class SessionAffinityStrategy(RoutingStrategy):
         """检查现有的会话→Agent 绑定。"""
         redis: aioredis.Redis = await self._get_redis()
         binding_key: str = f"session:{request.session_id}:agent_binding"
-        bound_agent_id: Skill | None = await redis.get(binding_key)
+        bound_agent_id: str | None = await redis.get(binding_key)
 
         if bound_agent_id is None:
             return None

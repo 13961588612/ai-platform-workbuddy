@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 import contextlib
+from contextlib import AsyncExitStack
 from enum import Enum
 
 import httpx
@@ -147,14 +148,15 @@ class MCPClient:
         Returns:
             已就绪、尚未 ``initialize`` 的 ``ClientSession``。
         """
+        # 解包赋值不能写 read: T, write: U = ...，先注解再赋值
+        read: Any
+        write: Any
         if self._transport == MCPTransportType.STDIO:
             params: StdioServerParameters = StdioServerParameters(
                 command=self._endpoint,
                 args=self._args,
                 env=self._env or None,
             )
-            read: Any
-            write: Any
             read, write = await stack.enter_async_context(stdio_client(params))
         elif self._transport == MCPTransportType.SSE:
             read, write = await stack.enter_async_context(

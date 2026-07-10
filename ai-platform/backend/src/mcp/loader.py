@@ -48,8 +48,8 @@ def _parse_server(entry: dict[str, Any]) -> MCPServerConfig | None:
     Returns:
         解析成功时返回配置对象；缺少 ``name`` 或 ``endpoint`` 时返回 ``None``。
     """
-    name: Skill | None = entry.get("name")
-    endpoint: Skill | None = entry.get("endpoint", "")
+    name: str | None = entry.get("name")
+    endpoint: str = entry.get("endpoint", "")
     if not name:
         return None
     if not endpoint:

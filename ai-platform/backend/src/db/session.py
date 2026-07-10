@@ -1,7 +1,6 @@
 """数据库 Session 管理 —— 异步引擎 + Session 工厂。"""
 
 from __future__ import annotations
-from typing import Any
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,7 +12,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from src.config import get_settings
+from src.config import Settings, get_settings
 from src.models.base import Base
 
 # 模块级引擎和 Session 工厂（延迟初始化）

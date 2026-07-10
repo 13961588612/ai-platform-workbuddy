@@ -17,16 +17,18 @@ from openharness.api.usage import UsageSnapshot
 from openharness.engine.messages import ConversationMessage, TextBlock, ToolUseBlock
 
 from src.llm.gateway import LLMGateway
-from src.llm.models import LLMMessage, LLMRequest, LLMRole, TokenUsage
+from src.llm.models import LLMMessage, LLMRequest, LLMResponse, LLMRole, TokenUsage
 
 
 def _openai_messages_to_llm(openai_messages: list[dict[str, Any]]) -> list[LLMMessage]:
     """将 OpenAI 格式的聊天消息转换为平台的 LLMMessage 列表。"""
     llm_messages: list[LLMMessage] = []
     for msg in openai_messages:
-        role: Skill | None = msg.get("role", "user")
+        role: str = msg.get("role", "user")
         if role == "system":
-            llm_messages.append(LLMMessage(role=LLMRole.SYSTEM, content=msg.get("content", "") or ""))
+            llm_messages.append(
+                LLMMessage(role=LLMRole.SYSTEM, content=msg.get("content", "") or "")
+            )
             continue
         if role == "tool":
             llm_messages.append(
@@ -129,18 +131,27 @@ class GatewayApiClient:
         if has_tools:
             response: LLMResponse = await self._gateway.chat(llm_request)
             if response.content:
-                chunk_size: int = 40
-                for i in range(0, len(response.content), chunk_size):
-                    yield ApiTextDeltaEvent(text=response.content[i : i + chunk_size])
+                # 按行切片，避免把 Markdown 表格行从中间切断导致前端渲染成段落
+                remaining: str = response.content
+                while remaining:
+                    nl: int = remaining.find("\n")
+                    if nl < 0:
+                        yield ApiTextDeltaEvent(text=remaining)
+                        break
+                    piece: str = remaining[: nl + 1]
+                    yield ApiTextDeltaEvent(text=piece)
+                    remaining = remaining[nl + 1 :]
 
             content_blocks: list[Any] = []
             if response.content:
                 content_blocks.append(TextBlock(text=response.content))
             for tc in response.tool_calls:
-                function: Skill | None = tc.get("function", {})
-                raw_args: Skill | None = function.get("arguments", "{}")
+                function: dict[str, Any] = tc.get("function", {})
+                raw_args: str = function.get("arguments", "{}")
                 try:
-                    parsed_args: Any = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                    parsed_args: Any = (
+                        json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                    )
                 except (json.JSONDecodeError, TypeError):
                     parsed_args: dict[str, Any] = {}
                 content_blocks.append(
@@ -169,11 +180,13 @@ class GatewayApiClient:
                 collected += chunk.content
                 yield ApiTextDeltaEvent(text=chunk.content)
             if chunk.usage is not None:
-                total_usage: Any = chunk.usage
+                total_usage += chunk.usage
             if chunk.finish_reason:
-                finish_reason: Any = chunk.finish_reason
+                finish_reason = chunk.finish_reason
 
-        content_blocks: list[TextBlock] | list[Any] = [TextBlock(text=collected)] if collected else []
+        content_blocks: list[TextBlock] | list[Any] = (
+            [TextBlock(text=collected)] if collected else []
+        )
         yield ApiMessageCompleteEvent(
             message=ConversationMessage(role="assistant", content=content_blocks),
             usage=UsageSnapshot(

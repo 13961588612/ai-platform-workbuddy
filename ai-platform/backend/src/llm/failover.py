@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 
 from src.config import get_settings
 from src.llm.models import FailoverConfig
-from src.utils.exceptions import FailoverExhaustedError
 from src.utils.logging import get_logger
 
 logger = get_logger("llm.failover")
@@ -138,7 +137,7 @@ class FailoverManager:
         self._last_recovery_check = now
 
         # 如果主 provider 上次故障时间已过很久，尝试切回
-        last_failure: Skill | None = self._last_failure_at.get(self._config.primary)
+        last_failure: datetime | None = self._last_failure_at.get(self._config.primary)
         if last_failure is not None:
             elapsed: Any = (datetime.now(timezone.utc) - last_failure).total_seconds()
             if elapsed >= self._config.recovery_check_interval:

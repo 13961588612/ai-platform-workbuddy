@@ -55,7 +55,10 @@ class CRMAdapter(BusinessSystemAdapter):
                     "type": "object",
                     "properties": {
                         "member_id": {"type": "string", "description": "会员ID"},
-                        "include_history": {"type": "boolean", "description": "是否包含积分变动明细"},
+                        "include_history": {
+                            "type": "boolean",
+                            "description": "是否包含积分变动明细",
+                        },
                     },
                     "required": ["member_id"],
                 },
@@ -70,7 +73,10 @@ class CRMAdapter(BusinessSystemAdapter):
                     "type": "object",
                     "properties": {
                         "member_id": {"type": "string", "description": "会员ID"},
-                        "amount": {"type": "integer", "description": "积分变动数量（正数加分，负数扣分）"},
+                        "amount": {
+                            "type": "integer",
+                            "description": "积分变动数量（正数加分，负数扣分）",
+                        },
                         "reason": {"type": "string", "description": "调整原因"},
                     },
                     "required": ["member_id", "amount", "reason"],
@@ -101,8 +107,16 @@ class CRMAdapter(BusinessSystemAdapter):
                     "type": "object",
                     "properties": {
                         "member_id": {"type": "string", "description": "会员ID"},
-                        "tags": {"type": "array", "items": {"type": "string"}, "description": "标签列表"},
-                        "operation": {"type": "string", "enum": ["add", "remove", "replace"], "description": "操作类型"},
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "标签列表",
+                        },
+                        "operation": {
+                            "type": "string",
+                            "enum": ["add", "remove", "replace"],
+                            "description": "操作类型",
+                        },
                     },
                     "required": ["member_id", "tags", "operation"],
                 },
@@ -130,7 +144,10 @@ class CRMAdapter(BusinessSystemAdapter):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "status": {"type": "string", "description": "活动状态: planned/active/ended"},
+                        "status": {
+                            "type": "string",
+                            "description": "活动状态: planned/active/ended",
+                        },
                         "campaign_type": {"type": "string", "description": "活动类型"},
                     },
                 },
@@ -179,12 +196,18 @@ class CRMAdapter(BusinessSystemAdapter):
             "query_customer_journey": "/api/members/journey",
         }
         if tool_name in get_tools:
-            data: dict[str, Any] = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "GET", get_tools[tool_name], credential, params=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "adjust_member_points":
-            data: dict[str, Any] = await self._http_request("POST", "/api/members/points/adjust", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "POST", "/api/members/points/adjust", credential, json_body=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "update_member_tags":
-            data: dict[str, Any] = await self._http_request("PUT", "/api/members/tags", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "PUT", "/api/members/tags", credential, json_body=arguments
+            )
             return ToolResult(success=True, data=data)
         return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

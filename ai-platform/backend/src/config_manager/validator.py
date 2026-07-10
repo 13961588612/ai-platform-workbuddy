@@ -63,15 +63,15 @@ class ConfigValidator:
                     f"Supported: {self.SUPPORTED_RUNTIME_TYPES}"
                 )
             if config.runtime.params:
-                max_steps: Skill | None = config.runtime.params.get("maxSteps", 20)
+                max_steps: int = config.runtime.params.get("maxSteps", 20)
                 if not isinstance(max_steps, int) or max_steps < 1:
                     errors.append("runtime.params.maxSteps must be a positive integer")
 
-                temperature: Skill | None = config.runtime.params.get("temperature", 0.7)
+                temperature: float = config.runtime.params.get("temperature", 0.7)
                 if not isinstance(temperature, (int, float)) or temperature < 0 or temperature > 2:
                     errors.append("runtime.params.temperature must be between 0 and 2")
 
-                max_tokens: Skill | None = config.runtime.params.get("maxTokens", 4096)
+                max_tokens: int = config.runtime.params.get("maxTokens", 4096)
                 if not isinstance(max_tokens, int) or max_tokens < 1:
                     errors.append("runtime.params.maxTokens must be a positive integer")
 
@@ -152,7 +152,7 @@ class ConfigValidator:
     def validate_yaml_dict(self, data: dict[str, Any]) -> list[str]:
         """在解析为 AgentConfig 之前验证原始 YAML 字典。"""
         errors: list[str] = []
-        agent_section: Skill | None = data.get("agent", data)
+        agent_section: dict[str, Any] = data.get("agent", data)
 
         if not agent_section.get("name"):
             errors.append("agent.name is required")
@@ -160,7 +160,7 @@ class ConfigValidator:
             errors.append("agent.display_name is required")
 
         # 在文件模式下检查 includes 引用的文件是否存在
-        includes: Skill | None = agent_section.get("includes", {})
+        includes: dict[str, Any] = agent_section.get("includes", {})
         for ref_name, ref_path in includes.items():
             if not isinstance(ref_path, str):
                 errors.append(f"agent.includes.{ref_name} must be a string path")

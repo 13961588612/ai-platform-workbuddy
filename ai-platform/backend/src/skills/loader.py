@@ -67,7 +67,9 @@ def _metadata_to_skill(
 ) -> Skill:
     """将 Front Matter 元数据转换为 Skill 模型（不含正文）。"""
     skill_id: str = resolve_skill_id(metadata, package_name)
-    source: SkillSource = _parse_source(str(metadata.get("source", "package" if package_name else "custom")))
+    source: SkillSource = _parse_source(
+        str(metadata.get("source", "package" if package_name else "custom"))
+    )
 
     return Skill(
         skill_id=skill_id,
@@ -76,7 +78,9 @@ def _metadata_to_skill(
         category=str(metadata.get("category", "built_in")),
         tags=list(metadata.get("tags", []) or []),
         parameters=resolve_input_schema(metadata),
-        required_permissions=list(metadata.get("required_permissions", metadata.get("permissions", [])) or []),
+        required_permissions=list(
+            metadata.get("required_permissions", metadata.get("permissions", [])) or []
+        ),
         handler=str(metadata.get("handler", "")),
         timeout=int(metadata.get("timeout", 30)),
         version=str(metadata.get("version", "1.0.0")),

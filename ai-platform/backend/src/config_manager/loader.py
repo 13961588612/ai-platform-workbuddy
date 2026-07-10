@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Any
 
 import json
-import os
 from pathlib import Path
 
 import yaml
@@ -91,8 +90,8 @@ class ConfigLoader:
         agent_dir: Path,
     ) -> dict[str, Any]:
         """解析 agent.yaml 中引用的子配置文件。"""
-        agent_section: Skill | None = data.get("agent", data)
-        includes: Skill | None = agent_section.get("includes", {})
+        agent_section: dict[str, Any] = data.get("agent", data)
+        includes: dict[str, Any] = agent_section.get("includes", {})
 
         # 加载 runtime 配置
         if "runtime" in includes:
@@ -136,8 +135,8 @@ class ConfigLoader:
                 data["mcp_servers"] = mcp_data.get("mcp_servers", [])
 
         # 当 system prompt 通过路径引用时，从 markdown 文件加载
-        runtime_section: Skill | None = data.get("runtime", {})
-        prompts: Skill | None = runtime_section.get("prompts", {})
+        runtime_section: dict[str, Any] = data.get("runtime", {})
+        prompts: dict[str, Any] = runtime_section.get("prompts", {})
         system_ref: Any = prompts.get("system") or prompts.get("system_prompt")
         if isinstance(system_ref, str) and system_ref.endswith((".md", ".txt")):
             prompt_path: Any = agent_dir / system_ref
@@ -196,7 +195,7 @@ class ConfigLoader:
                 AgentConfigModel.agent_id == agent_id,
                 AgentConfigModel.is_deleted == False,  # noqa: E712
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             row: Any = result.scalar_one_or_none()
 
         if row is None:
@@ -218,7 +217,7 @@ class ConfigLoader:
                 AgentConfigModel.is_deleted == False,  # noqa: E712
                 AgentConfigModel.is_active == True,  # noqa: E712
             )
-            result: ToolResult = await session.execute(stmt)
+            result: Any = await session.execute(stmt)
             rows: Any = result.scalars().all()
 
         configs: list[AgentConfig] = []

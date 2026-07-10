@@ -108,8 +108,10 @@ class LifecycleStateMachine:
         Raises:
             如果从当前状态出发该转换不合法，抛出 AgentStateError。
         """
-        valid_transitions: Skill | None = TRANSITION_TABLE.get(self._current_state, {})
-        new_state: Skill | None = valid_transitions.get(event)
+        valid_transitions: dict[LifecycleEvent, InstanceState] = TRANSITION_TABLE.get(
+            self._current_state, {}
+        )
+        new_state: InstanceState | None = valid_transitions.get(event)
 
         if new_state is None:
             raise AgentStateError(
@@ -143,7 +145,10 @@ class LifecycleStateMachine:
     ) -> None:
         """注册一个转换前或转换后的钩子。"""
         if hook_type not in self._hooks:
-            raise ValueError(f"Invalid hook type: {hook_type}. Use 'before_transition' or 'after_transition'")
+            raise ValueError(
+                f"Invalid hook type: {hook_type}. "
+                "Use 'before_transition' or 'after_transition'"
+            )
         self._hooks[hook_type].append(callback)
 
     def is_active(self) -> bool:

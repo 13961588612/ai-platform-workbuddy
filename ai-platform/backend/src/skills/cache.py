@@ -69,7 +69,7 @@ class HotSkillCache:
     ) -> list[SkillScore] | None:
         """返回 *query* 的缓存 Top-N 结果，缓存未命中时返回 ``None``。"""
         key: str = f"skill:query:{self._query_hash(query, categories)}"
-        raw: Skill | None = await self._redis.get(key)
+        raw: str | None = await self._redis.get(key)
         if raw is None:
             return None
         from src.skills.models import SkillScore
@@ -102,7 +102,7 @@ class HotSkillCache:
 
     async def get_skill(self, skill_id: str) -> Skill | None:
         """返回缓存的 Skill 元数据，缓存未命中时返回 ``None``。"""
-        raw: Skill | None = await self._redis.get(f"skill:meta:{skill_id}")
+        raw: str | None = await self._redis.get(f"skill:meta:{skill_id}")
         if raw is None:
             return None
         from src.skills.models import Skill
@@ -140,7 +140,7 @@ class HotSkillCache:
         Returns:
             Schema 字典，或 ``None``。
         """
-        raw: Skill | None = await self._redis.get(f"skill_schema:{skill_id}")
+        raw: str | None = await self._redis.get(f"skill_schema:{skill_id}")
         if raw is None:
             return None
         return json.loads(raw)

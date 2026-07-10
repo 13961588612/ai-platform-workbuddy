@@ -63,7 +63,7 @@ class PermissionEngine:
 
         # 3. 角色级别检查
         for role_id in user.roles:
-            role: Skill | None = self._role_cache.get(role_id, {})
+            role: dict[str, Any] = self._role_cache.get(role_id, {})
             if skill_id in role.get("skill_deny_list", []):
                 return False
             if skill_id in role.get("skill_allow_list", []):
@@ -71,21 +71,21 @@ class PermissionEngine:
 
         # 4. 部门拒绝的分类
         if user.dept_id:
-            dept: Skill | None = self._dept_cache.get(user.dept_id, {})
+            dept: dict[str, Any] = self._dept_cache.get(user.dept_id, {})
             if skill_category in dept.get("denied_categories", []):
                 return False
 
         # 5. 部门允许的分类
         if user.dept_id:
-            dept: Skill | None = self._dept_cache.get(user.dept_id, {})
-            allowed: Skill | None = dept.get("allowed_categories", [])
+            dept: dict[str, Any] = self._dept_cache.get(user.dept_id, {})
+            allowed: list[Any] = dept.get("allowed_categories", [])
             if allowed and skill_category not in allowed:
                 return False
 
         # 6. 角色允许的分类
         for role_id in user.roles:
-            role: Skill | None = self._role_cache.get(role_id, {})
-            allowed_cats: Skill | None = role.get("allowed_categories", [])
+            role: dict[str, Any] = self._role_cache.get(role_id, {})
+            allowed_cats: list[Any] = role.get("allowed_categories", [])
             if allowed_cats and skill_category in allowed_cats:
                 return True
 
@@ -119,7 +119,7 @@ class PermissionEngine:
         """从用户的允许列表中返回 Skill ID（仅显式覆盖）。"""
         allowed: set[str] = set(user.skill_allow_list)
         for role_id in user.roles:
-            role: Skill | None = self._role_cache.get(role_id, {})
+            role: dict[str, Any] = self._role_cache.get(role_id, {})
             allowed.update(role.get("skill_allow_list", []))
         return list(allowed)
 
@@ -133,13 +133,13 @@ class PermissionEngine:
 
         # 来自角色
         for role_id in user.roles:
-            role: Skill | None = self._role_cache.get(role_id, {})
+            role: dict[str, Any] = self._role_cache.get(role_id, {})
             cats.update(role.get("allowed_categories", []))
 
         # 来自部门
         if user.dept_id:
-            dept: Skill | None = self._dept_cache.get(user.dept_id, {})
-            dept_allowed: Skill | None = dept.get("allowed_categories", [])
+            dept: dict[str, Any] = self._dept_cache.get(user.dept_id, {})
+            dept_allowed: list[Any] = dept.get("allowed_categories", [])
             if dept_allowed:
                 # 取交集：部门进行进一步限制
                 if cats:
@@ -157,7 +157,7 @@ class PermissionEngine:
         if user.can_approve:
             return True
         for role_id in user.roles:
-            role: Skill | None = self._role_cache.get(role_id, {})
+            role: dict[str, Any] = self._role_cache.get(role_id, {})
             if role.get("can_approve", False):
                 return True
         return False

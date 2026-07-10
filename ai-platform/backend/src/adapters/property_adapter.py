@@ -40,7 +40,10 @@ class PropertyAdapter(BusinessSystemAdapter):
                     "type": "object",
                     "properties": {
                         "location": {"type": "string", "description": "报修位置"},
-                        "category": {"type": "string", "description": "维修类别: electrical/plumbing/hvac/structural"},
+                        "category": {
+                            "type": "string",
+                            "description": "维修类别: electrical/plumbing/hvac/structural",
+                        },
                         "description": {"type": "string", "description": "故障描述"},
                         "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"]},
                     },
@@ -162,9 +165,13 @@ class PropertyAdapter(BusinessSystemAdapter):
             "query_property_contracts": "/api/contracts",
         }
         if tool_name in get_tools:
-            data: dict[str, Any] = await self._http_request("GET", get_tools[tool_name], credential, params=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "GET", get_tools[tool_name], credential, params=arguments
+            )
             return ToolResult(success=True, data=data)
         elif tool_name == "create_repair_request":
-            data: dict[str, Any] = await self._http_request("POST", "/api/repairs", credential, json_body=arguments)
+            data: dict[str, Any] = await self._http_request(
+                "POST", "/api/repairs", credential, json_body=arguments
+            )
             return ToolResult(success=True, data=data)
         return ToolResult(success=False, error=f"Unknown tool: {tool_name}")

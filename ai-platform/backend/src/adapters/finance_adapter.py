@@ -39,7 +39,10 @@ class FinanceAdapter(BusinessSystemAdapter):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "status": {"type": "string", "description": "报销单状态: draft/pending/approved/rejected"},
+                        "status": {
+                            "type": "string",
+                            "description": "报销单状态: draft/pending/approved/rejected",
+                        },
                         "start_date": {"type": "string", "description": "起始日期 YYYY-MM-DD"},
                         "end_date": {"type": "string", "description": "结束日期 YYYY-MM-DD"},
                         "department": {"type": "string", "description": "部门名称"},
@@ -59,7 +62,11 @@ class FinanceAdapter(BusinessSystemAdapter):
                         "amount": {"type": "number", "description": "报销金额"},
                         "category": {"type": "string", "description": "费用类别"},
                         "description": {"type": "string", "description": "报销说明"},
-                        "receipts": {"type": "array", "items": {"type": "string"}, "description": "发票附件ID列表"},
+                        "receipts": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "发票附件ID列表",
+                        },
                     },
                     "required": ["title", "amount", "category"],
                 },
@@ -89,7 +96,10 @@ class FinanceAdapter(BusinessSystemAdapter):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "statement_type": {"type": "string", "enum": ["balance_sheet", "income_statement", "cash_flow"]},
+                        "statement_type": {
+                            "type": "string",
+                            "enum": ["balance_sheet", "income_statement", "cash_flow"],
+                        },
                         "period": {"type": "string", "description": "报表期间 YYYY-MM"},
                     },
                     "required": ["statement_type", "period"],

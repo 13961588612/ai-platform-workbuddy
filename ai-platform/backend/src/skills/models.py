@@ -129,9 +129,16 @@ class Skill(BaseModel):
 
     def index_text(self) -> str:
         """返回用于向量索引的文本（元数据阶段即可生成）。"""
-        parts: list[Any] = [self.name, self.description, " ".join(self.tags), self.category]
+        parts: list[Any] = [
+            self.name,
+            self.description,
+            " ".join(self.tags),
+            self.category,
+        ]
         schema: Any = self.parameters
-        properties: Skill | None | dict[str, Any] = schema.get("properties", {}) if isinstance(schema, dict) else {}
+        properties: dict[str, Any] = (
+            schema.get("properties", {}) if isinstance(schema, dict) else {}
+        )
         for param_name, param_def in properties.items():
             if isinstance(param_def, dict):
                 parts.append(f"{param_name} {param_def.get('description', '')}")

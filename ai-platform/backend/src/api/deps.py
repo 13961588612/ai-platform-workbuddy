@@ -7,11 +7,12 @@ from __future__ import annotations
 from typing import Any
 
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Header, HTTPException, status
 
 from src.agent.manager import AgentManager, get_agent_manager
 from src.agent.session import SessionManager, get_session_manager
 from src.config_manager.manager import ConfigManager, get_config_manager
+from src.identity.models import TokenPayload
 from src.identity.token import TokenError, TokenManager
 from src.llm.gateway import LLMGateway, get_llm_gateway
 from src.router.agent_router import AgentRouter, get_agent_router

@@ -15,11 +15,11 @@ Manager 协调以下组件：
 from __future__ import annotations
 from typing import Any
 
-from datetime import datetime, timezone
 
-from src.config import get_settings
+from src.config import Settings, get_settings
 from src.hitl.store import ApprovalRecord, ApprovalStatus, ApprovalStore
 from src.push.wecom_pusher import WecomPusher, get_wecom_pusher
+from src.runtime.base import AgentRuntime
 from src.utils.logging import get_logger
 
 logger = get_logger("hitl.approval")
@@ -93,7 +93,9 @@ class ApprovalManager:
             RuntimeError：如果用户待审批数量过多。
         """
         # 检查每个用户的最大待审批数量
-        pending: list[ApprovalRecord] = await self._store.list_by_user(user_id, ApprovalStatus.PENDING)
+        pending: list[ApprovalRecord] = await self._store.list_by_user(
+            user_id, ApprovalStatus.PENDING
+        )
         if len(pending) >= self._max_pending_per_user:
             logger.warning(
                 "User has too many pending approvals",
@@ -171,7 +173,7 @@ class ApprovalManager:
                 f"Invalid decision: {decision}. Must be 'approved' or 'rejected'."
             )
 
-        record: Skill | None = await self._store.get(approval_id)
+        record: ApprovalRecord | None = await self._store.get(approval_id)
         if not record:
             return None
 
@@ -193,7 +195,9 @@ class ApprovalManager:
             ApprovalStatus.APPROVED if decision == "approved" else ApprovalStatus.REJECTED
         )
 
-        updated: ApprovalRecord | None = await self._store.update_status(approval_id, status, comment)
+        updated: ApprovalRecord | None = await self._store.update_status(
+            approval_id, status, comment
+        )
         if not updated:
             return None
 
@@ -257,8 +261,8 @@ class ApprovalManager:
         使用 WecomPusher 发送带批准/拒绝按钮的 button_interaction 模板卡片。
         这与 Gateway 的 BotEventMapper approval_card 映射保持一致。
         """
-        title: Skill | None = record.detail.get("title", "审批请求")
-        description: Skill | None = record.detail.get("description", "请审批此操作")
+        title: str = record.detail.get("title", "审批请求")
+        description: str = record.detail.get("description", "请审批此操作")
 
         await self._wecom_pusher.send_approval_notification(
             user_id=record.user_id,

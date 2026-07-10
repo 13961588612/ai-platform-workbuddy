@@ -105,7 +105,12 @@ class Session:
         self.created_at = datetime.now(timezone.utc)
         self.updated_at = datetime.now(timezone.utc)
 
-    def add_message(self, role: str, content: str, metadata: dict[str, Any] | None = None) -> Message:
+    def add_message(
+        self,
+        role: str,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> Message:
         """向会话中添加一条消息。"""
         msg: Message = Message(role=role, content=content, metadata=metadata)
         self.messages.append(msg)
@@ -176,7 +181,7 @@ class SessionManager:
         会话 ID 格式：{channel_prefix}{uuid}
         示例：web-{uuid}、wecom-h5-{uuid}、wecom-bot-{uuid}
         """
-        prefix: Skill | None = CHANNEL_PREFIXES.get(channel, f"{channel}-")
+        prefix: str = CHANNEL_PREFIXES.get(channel, f"{channel}-")
         session_id: str = f"{prefix}{uuid.uuid4()}"
 
         session: Session = Session(
@@ -214,7 +219,7 @@ class SessionManager:
     async def get_session(self, session_id: str) -> Session:
         """按 ID 从 Redis 中获取会话。"""
         redis: aioredis.Redis = await self._get_redis()
-        data: Skill | None = await redis.get(self._session_key(session_id))
+        data: str | None = await redis.get(self._session_key(session_id))
 
         if data is None:
             raise SessionNotFoundError(session_id)

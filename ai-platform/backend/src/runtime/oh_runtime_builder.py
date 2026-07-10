@@ -12,6 +12,7 @@ from openharness.mcp.types import McpHttpServerConfig, McpServerConfig, McpStdio
 from openharness.permissions.checker import PermissionChecker
 from openharness.permissions.modes import PermissionMode
 from openharness.prompts import build_runtime_system_prompt
+from openharness.tools.base import ToolRegistry
 
 from src.agent.config import AgentConfig, MCPServerConfig
 from src.config import get_settings
@@ -140,7 +141,9 @@ async def build_native_query_engine(
     agent_prompt: Any = config.system_prompt or ""
     if config.runtime and config.runtime.prompts.get("system_prompt"):
         agent_prompt: Any = config.runtime.prompts["system_prompt"]
-    system_prompt: str = "\n\n".join(part for part in (agent_prompt, oh_system_prompt) if part).strip()
+    system_prompt: str = "\n\n".join(
+        part for part in (agent_prompt, oh_system_prompt) if part
+    ).strip()
 
     api_client: GatewayApiClient = GatewayApiClient(
         gateway,

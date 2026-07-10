@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field
 
 from src.api.response import error_response, success
 from src.identity.auth import AuthenticationError, AuthService
-from src.identity.models import PasswordLoginRequest, WeComOAuthRequest
-from src.identity.test_accounts import get_test_account_store
+from src.identity.models import PasswordLoginRequest, TokenSet, WeComOAuthRequest
+from src.identity.test_accounts import TestAccount, TestAccountStore, get_test_account_store
 from src.identity.token import TokenError, TokenManager
 from src.utils.logging import get_logger
 

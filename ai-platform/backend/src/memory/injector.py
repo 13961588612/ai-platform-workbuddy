@@ -27,10 +27,10 @@ import structlog
 
 from src.config import get_settings
 from src.agent.config import MemoryConfig
-from src.llm.gateway import get_llm_gateway
-from src.llm.models import LLMMessage, LLMRequest, LLMRole
+from src.llm.gateway import LLMGateway, get_llm_gateway
+from src.llm.models import LLMMessage, LLMRequest, LLMResponse, LLMRole
 from src.memory.manager import MemoryManager, get_memory_manager
-from src.memory.models import ExtractedMemory, MemoryType
+from src.memory.models import ExtractedMemory, MemorySearchResult, MemoryType
 
 logger = structlog.get_logger("memory.injector")
 
@@ -363,9 +363,9 @@ class MemoryInjector:
             return ""
         lines: list[str] = ["# 对话历史"]
         for msg in messages:
-            role: Skill | None = msg.get("role", "unknown")
-            content: Skill | None = msg.get("content", "")
-            role_label: Skill | None = {
+            role: str = msg.get("role", "unknown")
+            content: str = msg.get("content", "")
+            role_label: str = {
                 "user": "用户",
                 "assistant": "助手",
                 "system": "系统",
@@ -389,8 +389,8 @@ class MemoryInjector:
         # 包含最近的历史（有限制）
         recent: Any = context.messages[-_MAX_EXTRACTION_MESSAGES:]
         for msg in recent:
-            role: Skill | None = msg.get("role", "unknown")
-            content: Skill | None = msg.get("content", "")
+            role: str = msg.get("role", "unknown")
+            content: str = msg.get("content", "")
             lines.append(f"[{role}] {content}")
 
         # 始终包含当前的查询和响应
@@ -483,9 +483,9 @@ class MemoryInjector:
         for item in items:
             if not isinstance(item, dict):
                 continue
-            memory_type_str: Skill | None = item.get("memory_type", "context")
-            content: Skill | None = item.get("content", "")
-            importance: Skill | None = item.get("importance", 0.5)
+            memory_type_str: str = item.get("memory_type", "context")
+            content: str = item.get("content", "")
+            importance: float = item.get("importance", 0.5)
             if not content or not isinstance(content, str):
                 continue
             try:

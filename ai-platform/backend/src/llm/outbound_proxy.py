@@ -16,7 +16,6 @@ from __future__ import annotations
 from typing import Any
 
 import threading
-import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -131,7 +130,9 @@ class OutboundProxyManager:
             域名是否被允许。
         """
         # 合并配置的允许域名与默认值
-        allowed: set[Any] = set(self.ALLOWED_DOMAINS + self._settings.OUTBOUND_PROXY_ALLOWED_DOMAINS)
+        allowed: set[Any] = set(
+            self.ALLOWED_DOMAINS + self._settings.OUTBOUND_PROXY_ALLOWED_DOMAINS
+        )
         return any(domain.endswith(d) for d in allowed)
 
     def check_domain(self, url: str) -> bool:
@@ -190,7 +191,7 @@ class OutboundProxyManager:
                 timeout=10,
             ) as client:
                 # 通过代理进行简单的连通性检查
-                response: Skill | None = await client.get("https://httpbin.org/status/200")
+                response: httpx.Response = await client.get("https://httpbin.org/status/200")
                 is_ok: bool = response.status_code == 200
         except Exception as exc:
             logger.warning(

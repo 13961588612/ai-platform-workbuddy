@@ -59,8 +59,12 @@ class AgentEvent(BaseModel):
     tool_name: str | None = None
     args: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
+    
+    # ui.render：前端要渲染的组件名（如卡片、表单）
     component: str | None = None
+    # ui.render：传给该组件的属性/数据
     props: dict[str, Any] | None = None
+    # approval.request：触发人机审批的 Skill ID
     skill_id: str | None = None
     error_code: str | None = None
     message: str | None = None
