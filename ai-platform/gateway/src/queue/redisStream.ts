@@ -25,8 +25,12 @@ export interface InboundMessage {
   id: string;
   /** 会话 ID */
   sessionId: string;
-  /** 用户 ID */
+  /** 用户 ID（平台侧统一用户标识） */
   userId: string;
+  /** 用户手机号（可选） */
+  userMobile?: string;
+  /** 渠道侧给出的 userId（如企微 userid） */
+  channelUserId?: string;
   /** 渠道类型 */
   channel: string;
   /** Agent ID（可选，路由后填充） */
@@ -93,6 +97,12 @@ export class StreamProducer {
       messageType: message.messageType,
       traceId: message.traceId,
       timestamp: message.timestamp,
+      ...(message.userMobile != null && message.userMobile.length > 0
+        ? { userMobile: message.userMobile }
+        : {}),
+      ...(message.channelUserId != null && message.channelUserId.length > 0
+        ? { channelUserId: message.channelUserId }
+        : {}),
       ...(message.agentId != null ? { agentId: message.agentId } : {}),
       ...(message.metadata != null
         ? { metadata: JSON.stringify(message.metadata) }
@@ -305,6 +315,12 @@ export class StreamConsumer {
         messageType: fieldObj['messageType'] ?? 'text',
         traceId: fieldObj['traceId'] ?? '',
         timestamp: fieldObj['timestamp'] ?? new Date().toISOString(),
+        ...(fieldObj['userMobile'] != null && fieldObj['userMobile'].length > 0
+          ? { userMobile: fieldObj['userMobile'] }
+          : {}),
+        ...(fieldObj['channelUserId'] != null && fieldObj['channelUserId'].length > 0
+          ? { channelUserId: fieldObj['channelUserId'] }
+          : {}),
         ...(fieldObj['agentId'] != null ? { agentId: fieldObj['agentId'] } : {}),
         ...(fieldObj['metadata'] != null
           ? { metadata: JSON.parse(fieldObj['metadata']) as Record<string, unknown> }

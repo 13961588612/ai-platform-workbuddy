@@ -81,6 +81,7 @@ export class H5Adapter {
       id: randomUUID(),
       sessionId,
       userId,
+      channelUserId: userId,
       channel: 'h5',
       content: rawMessage.content,
       messageType: rawMessage.messageType ?? 'text',

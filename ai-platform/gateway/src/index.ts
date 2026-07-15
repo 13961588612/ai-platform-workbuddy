@@ -46,16 +46,18 @@ import {
  * - WECOM_AGENT_ID: 企业微信应用 AgentID
  * - WECOM_SECRET: 企业微信应用 Secret
  * - WECOM_API_BASE_URL: 企业微信 API 基础 URL
- * - WECOM_BOT_CALLBACK_TOKEN: 企业微信 Bot 回调 Token
- * - WECOM_BOT_WS_URL: 企业微信 Bot WebSocket URL
- * - WECOM_BOT_WS_AUTH_TOKEN: 企业微信 Bot WebSocket 鉴权 Token
+ * - WECOM_BOT_CALLBACK_TOKEN: 企业微信 Bot 回调 Token（URL 回调模式）
+ * - WECOM_BOT_ID: 智能机器人 BotID（长连接鉴权）
+ * - WECOM_BOT_SECRET: 智能机器人长连接 Secret
+ * - WECOM_BOT_WS_URL: 可选，默认 wss://openws.work.weixin.qq.com
  * - AGENT_CORE_API_URL: Agent Core API URL
  * - CORS_ORIGINS: CORS 允许的源（逗号分隔）
  *
  * @returns Gateway 配置
  */
 function loadConfig(): GatewayServerConfig {
-  const requiredEnvVars = ['REDIS_URL', 'JWT_SECRET', 'WECOM_CORP_ID', 'WECOM_SECRET'];
+  // 核心必填：Redis + JWT。企微自建应用凭证仅 H5 需要，可留空。
+  const requiredEnvVars = ['REDIS_URL', 'JWT_SECRET'];
   for (const envVar of requiredEnvVars) {
     if (process.env[envVar] == null || process.env[envVar] === '') {
       throw new Error(`Missing required environment variable: ${envVar}`);
@@ -74,20 +76,22 @@ function loadConfig(): GatewayServerConfig {
       wecomCallbackAesKey: process.env['WECOM_BOT_CALLBACK_ENCODING_AES_KEY'] ?? '',
     },
     wecomH5: {
-      corpId: process.env['WECOM_CORP_ID']!,
+      corpId: process.env['WECOM_CORP_ID'] ?? '',
       agentId: process.env['WECOM_AGENT_ID'] ?? '',
-      corpSecret: process.env['WECOM_SECRET']!,
+      corpSecret: process.env['WECOM_SECRET'] ?? '',
       apiBaseUrl: process.env['WECOM_API_BASE_URL'] ?? 'https://qyapi.weixin.qq.com',
     },
     wecomBot: {
-      wsUrl: process.env['WECOM_BOT_WS_URL'] ?? 'wss://qyapi.weixin.qq.com/cgi-bin/wxconnect',
-      authToken: process.env['WECOM_BOT_WS_AUTH_TOKEN'] ?? '',
+      botId: process.env['WECOM_BOT_ID'] ?? '',
+      secret: process.env['WECOM_BOT_SECRET'] ?? '',
+      wsUrl: process.env['WECOM_BOT_WS_URL'] ?? 'wss://openws.work.weixin.qq.com',
       heartbeatIntervalSec: parseInt(process.env['WECOM_BOT_HEARTBEAT_INTERVAL'] ?? '30', 10),
       heartbeatTimeoutCount: 3,
       maxReconnectAttempts: 10,
       initialReconnectDelayMs: 1000,
       maxReconnectDelayMs: 30000,
       reconnectBackoffMultiplier: 2,
+      subscribeTimeoutMs: parseInt(process.env['WECOM_BOT_SUBSCRIBE_TIMEOUT_MS'] ?? '10000', 10),
       sourceName: process.env['WECOM_BOT_SOURCE_NAME'] ?? 'AI智能助手',
       ...(process.env['WECOM_BOT_SOURCE_ICON_URL'] != null
         ? { sourceIconUrl: process.env['WECOM_BOT_SOURCE_ICON_URL'] }
@@ -170,7 +174,7 @@ async function main(): Promise<void> {
       'Starting AI Platform Gateway',
     );
 
-    // 创建 Redis 连接
+    // 业务连接（路由 / 亲和查询 / HTTP 侧）
     redis = createRedisConnection(process.env['REDIS_URL']!);
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -182,6 +186,22 @@ async function main(): Promise<void> {
         resolve();
       });
       redis!.on('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+    });
+
+    // 消费连接必须独立：XREADGROUP BLOCK 会占满单连接，拖慢 GET/XADD（实测 route 可达 10s+）
+    const redisConsumer = createRedisConnection(process.env['REDIS_URL']!);
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Redis consumer connection timeout'));
+      }, 10000);
+      redisConsumer.on('ready', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      redisConsumer.on('error', (error) => {
         clearTimeout(timeout);
         reject(error);
       });
@@ -200,13 +220,13 @@ async function main(): Promise<void> {
     // 启动 HTTP 服务器
     await startServer(app, { port: config.port, host: config.host });
 
-    // 启动企业微信 Bot WebSocket 长连接
-    if (config.wecomBot.wsUrl.length > 0 && config.wecomBot.authToken.length > 0) {
+    // 启动企业微信 Bot WebSocket 长连接（BotID + Secret → aibot_subscribe）
+    if (config.wecomBot.botId.length > 0 && config.wecomBot.secret.length > 0) {
       try {
         await wecomBotAdapter.start(async (inboundMessage: InboundMessage) => {
           await messageRouter.route(inboundMessage);
         });
-        logger.info('Wecom Bot adapter started');
+        logger.info({ botId: config.wecomBot.botId }, 'Wecom Bot adapter started');
       } catch (error) {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
@@ -214,11 +234,17 @@ async function main(): Promise<void> {
         );
       }
     } else {
-      logger.warn('Wecom Bot not configured, skipping Bot adapter startup');
+      logger.warn(
+        'WECOM_BOT_ID / WECOM_BOT_SECRET not configured, skipping Bot adapter startup',
+      );
     }
 
-    // 启动事件流消费者（消费 Agent Core 返回的事件）
-    const eventConsumer = new StreamConsumer(redis, 'gateway-event-group', `gateway-events-${process.pid}`);
+    // 启动事件流消费者（消费 Agent Core 返回的事件）— 使用独立 Redis 连接
+    const eventConsumer = new StreamConsumer(
+      redisConsumer,
+      'gateway-event-group',
+      `gateway-events-${process.pid}`,
+    );
     await eventConsumer.start('stream:agent:events', async (message: InboundMessage) => {
       try {
         if (message.eventJson == null || message.eventJson.length === 0) {
@@ -227,14 +253,38 @@ async function main(): Promise<void> {
 
         const event = parseBackendAgentEvent(message.eventJson);
         const channel = toGatewayChannel(message.channel);
+
+        logger.info(
+          {
+            sessionId: message.sessionId,
+            channel,
+            eventType: event.type,
+            perfPhase: 'gw_event',
+          },
+          'Agent event for channel',
+        );
+
+        // 企微 Bot：用 aibot_respond_msg 流式更新（收到消息时已回「思考中...」）
+        if (channel === 'wecom-bot') {
+          if (event.type === 'text.delta' && event.content != null) {
+            await wecomBotAdapter.onAgentTextDelta(message.sessionId, event.content);
+          } else if (event.type === 'error') {
+            await wecomBotAdapter.onAgentError(
+              message.sessionId,
+              event.errorMessage ?? event.errorCode ?? '处理出错',
+            );
+          } else if (event.type === 'done') {
+            await wecomBotAdapter.onAgentDone(message.sessionId);
+          }
+          return;
+        }
+
         const channelMessage = eventTransformer.transform(event, channel);
 
         if (channel === 'h5' && channelMessage.eventData != null) {
           await h5Adapter.send(channelMessage.eventData, message.sessionId);
         } else if (channel === 'wecom-h5' && channelMessage.eventData != null) {
           await wecomH5Adapter.send(channelMessage.eventData, message.sessionId);
-        } else if (channel === 'wecom-bot' && channelMessage.card != null) {
-          await wecomBotAdapter.sendCard(channelMessage.card, { userId: message.userId });
         }
       } catch (error) {
         logger.error(
@@ -278,10 +328,11 @@ async function main(): Promise<void> {
         h5Adapter,
       });
 
-      // 关闭 Redis
+      // 关闭 Redis（业务连接 + 消费连接）
       if (redis != null) {
         redis.disconnect();
       }
+      redisConsumer.disconnect();
 
       logger.info('Gateway shutdown complete');
       process.exit(0);

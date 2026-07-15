@@ -109,6 +109,7 @@ export class WecomH5Adapter {
       id: randomUUID(),
       sessionId,
       userId,
+      channelUserId: userId,
       channel: 'wecom-h5',
       content: rawMessage.content,
       messageType: rawMessage.messageType ?? 'text',

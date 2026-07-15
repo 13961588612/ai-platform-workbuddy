@@ -150,9 +150,13 @@ class SkillScore(BaseModel):
 
     skill: Skill
     score: float = 0.0
+    # 查询与 Skill 向量的语义相似度（综合分权重 0.5）
     semantic_similarity: float = 0.0
+    # 历史调用频次归一化分（综合分权重 0.2）
     usage_frequency: float = 0.0
+    # 最近使用时间衰减加分（综合分权重 0.15）
     recency_bonus: float = 0.0
+    # 业务分类是否匹配（综合分权重 0.15）
     category_match: float = 0.0
 
     def compute_composite(self) -> float:

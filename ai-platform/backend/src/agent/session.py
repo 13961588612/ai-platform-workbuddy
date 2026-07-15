@@ -216,6 +216,47 @@ class SessionManager:
         )
         return session
 
+    async def ensure_session(
+        self,
+        session_id: str,
+        agent_id: str,
+        user_id: str,
+        channel: str,
+        runtime_type: str = "openharness",
+    ) -> Session:
+        """按给定 session_id 获取会话；不存在则创建（Gateway 稳定会话场景）。"""
+        try:
+            return await self.get_session(session_id)
+        except SessionNotFoundError:
+            pass
+
+        session: Session = Session(
+            session_id=session_id,
+            agent_id=agent_id,
+            user_id=user_id,
+            channel=channel,
+            runtime_type=runtime_type,
+        )
+        redis: aioredis.Redis = await self._get_redis()
+        await redis.setex(
+            self._session_key(session_id),
+            self._session_ttl,
+            json.dumps(session.to_dict()),
+        )
+        await redis.setex(
+            self._agent_binding_key(session_id),
+            self._session_ttl,
+            agent_id,
+        )
+        logger.info(
+            "Session ensured (created)",
+            session_id=session_id,
+            agent_id=agent_id,
+            user_id=user_id,
+            channel=channel,
+        )
+        return session
+
     async def get_session(self, session_id: str) -> Session:
         """按 ID 从 Redis 中获取会话。"""
         redis: aioredis.Redis = await self._get_redis()

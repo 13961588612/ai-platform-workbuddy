@@ -214,6 +214,10 @@ class Settings(BaseSettings):
     SKILLS_RANKING_TOP_K: int = 10
     SKILLS_CACHE_TTL: int = 300
     SKILLS_CACHE_MAX_SIZE: int = 500
+    SKILLS_META_CACHE_TTL: int = 3600
+    SKILLS_SCHEMA_CACHE_TTL: int = 1800
+    SKILLS_FREQ_KEY: str = "skill:freq"
+    SKILLS_WARMUP_TOP_N: int = 50
 
     # ===== 速率限制 =====
     RATE_LIMIT_PER_USER_PER_MINUTE: int = 30

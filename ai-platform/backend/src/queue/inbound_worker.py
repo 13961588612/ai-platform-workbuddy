@@ -8,12 +8,13 @@ from typing import Any
 
 import asyncio
 import os
+import time
 
 import redis.asyncio as aioredis
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from src.agent.manager import AgentInstance, AgentManager, get_agent_manager
-from src.agent.session import Message, SessionManager, get_session_manager
+from src.agent.session import Message, Session, SessionManager, get_session_manager
 from src.config import Settings, get_settings
 from src.queue.redis_stream import (
     BLOCK_MS,
@@ -294,6 +295,31 @@ class InboundStreamWorker:
             logger.debug("Skip empty inbound message", session_id=inbound.session_id)
             return
 
+        t0: float = time.perf_counter()
+        perf_t0_ms: Any = None
+        if inbound.metadata and isinstance(inbound.metadata, dict):
+            perf_t0_ms = inbound.metadata.get("perfT0")
+
+        def _ms_since_start() -> int:
+            return int((time.perf_counter() - t0) * 1000)
+
+        def _ms_since_gw() -> int | None:
+            if perf_t0_ms is None:
+                return None
+            try:
+                return int(time.time() * 1000) - int(perf_t0_ms)
+            except (TypeError, ValueError):
+                return None
+
+        logger.info(
+            "Inbound process start",
+            session_id=inbound.session_id,
+            channel=inbound.channel,
+            content_len=len(inbound.content),
+            ms_since_gw=_ms_since_gw(),
+            perf_phase="be_start",
+        )
+
         agent_id: Any = inbound.agent_id
         if not agent_id and stream_key.startswith("stream:agent:"):
             agent_id: Any = stream_key.removeprefix("stream:agent:")
@@ -304,24 +330,99 @@ class InboundStreamWorker:
         if producer is None:
             raise RuntimeError("Stream producer not initialized")
 
+        t_session0: float = time.perf_counter()
+        session_created: bool = False
         try:
-            session: dict[str, Any] = await session_manager.get_session(inbound.session_id)
+            session: Session = await session_manager.get_session(inbound.session_id)
         except SessionNotFoundError:
-            logger.warning(
-                "Session not found for inbound message",
+            session_created = True
+            # Gateway 渠道消息常带稳定 session_id（如 wecom-bot-{userId}），首次需自动建会话
+            resolved_for_create: str | None = agent_id
+            if not resolved_for_create:
+                try:
+                    from src.router.agent_router import get_agent_router
+                    from src.router.models import UserRequest
+
+                    route_result: Any = await get_agent_router().route(
+                        UserRequest(
+                            text=inbound.content,
+                            user_id=inbound.user_id,
+                            session_id=inbound.session_id,
+                            channel=inbound.channel,
+                            metadata=inbound.metadata,
+                        ),
+                    )
+                    resolved_for_create = route_result.agent_id
+                except Exception as route_exc:
+                    logger.warning(
+                        "Inbound agent route failed, falling back to running agents",
+                        error=str(route_exc),
+                    )
+                    resolved_for_create = None
+
+            running: list[Any] = [
+                inst
+                for inst in agent_manager.list_agents()
+                if inst.lifecycle.current_state.value == "running"
+            ]
+            running_ids: set[str] = {inst.id for inst in running}
+            if not resolved_for_create or resolved_for_create not in running_ids:
+                if running:
+                    resolved_for_create = running[0].id
+                    logger.info(
+                        "Inbound using running agent",
+                        agent_id=resolved_for_create,
+                    )
+                else:
+                    resolved_for_create = self._settings.AGENT_ROUTER_DEFAULT_AGENT
+
+            if not resolved_for_create:
+                await self._publish_error(
+                    producer,
+                    inbound,
+                    "unknown",
+                    "agent_not_found",
+                    "No agent available to create session",
+                )
+                return
+
+            logger.info(
+                "Creating session for inbound message",
                 session_id=inbound.session_id,
                 user_id=inbound.user_id,
+                agent_id=resolved_for_create,
+                channel=inbound.channel,
             )
-            await self._publish_error(
-                producer,
-                inbound,
-                agent_id or "unknown",
-                "session_not_found",
-                f"Session not found: {inbound.session_id}",
+            session = await session_manager.ensure_session(
+                session_id=inbound.session_id,
+                agent_id=resolved_for_create,
+                user_id=inbound.user_id,
+                channel=inbound.channel,
             )
-            return
+
+        ms_session: int = int((time.perf_counter() - t_session0) * 1000)
+        logger.info(
+            "Inbound session ready",
+            session_id=inbound.session_id,
+            session_created=session_created,
+            ms_session=ms_session,
+            ms_since_start=_ms_since_start(),
+            ms_since_gw=_ms_since_gw(),
+            perf_phase="be_session",
+        )
 
         resolved_agent_id: Any = agent_id or session.agent_id
+        # 会话已有 agent，但可能未处于 running；纠正为当前可用实例
+        running_now: list[Any] = [
+            inst
+            for inst in agent_manager.list_agents()
+            if inst.lifecycle.current_state.value == "running"
+        ]
+        running_now_ids: set[str] = {inst.id for inst in running_now}
+        if resolved_agent_id not in running_now_ids and running_now:
+            resolved_agent_id = running_now[0].id
+            session.agent_id = resolved_agent_id
+            await session_manager.save_session(session)
         user_msg: Message = await session_manager.add_message(
             session_id=session.session_id,
             role="user",
@@ -329,6 +430,7 @@ class InboundStreamWorker:
             metadata=inbound.metadata,
         )
 
+        t_agent0: float = time.perf_counter()
         try:
             instance: AgentInstance = await agent_manager.ensure_agent_ready(resolved_agent_id)
         except AgentNotFoundError as exc:
@@ -341,9 +443,24 @@ class InboundStreamWorker:
             )
             return
 
+        ms_ensure_agent: int = int((time.perf_counter() - t_agent0) * 1000)
+        logger.info(
+            "Inbound agent ready",
+            session_id=session.session_id,
+            agent_id=resolved_agent_id,
+            ms_ensure_agent=ms_ensure_agent,
+            ms_since_start=_ms_since_start(),
+            ms_since_gw=_ms_since_gw(),
+            perf_phase="be_agent_ready",
+        )
+
         response_parts: list[str] = []
         runtime_error: str | None = None
         timeout_sec: Any = self._settings.AGENT_MESSAGE_TIMEOUT
+        first_event_ms: int | None = None
+        first_text_ms: int | None = None
+        event_count: int = 0
+        t_run0: float = time.perf_counter()
 
         try:
             async with asyncio.timeout(timeout_sec):
@@ -351,6 +468,18 @@ class InboundStreamWorker:
                     session=session,
                     message=user_msg,
                 ):
+                    if first_event_ms is None:
+                        first_event_ms = int((time.perf_counter() - t_run0) * 1000)
+                        logger.info(
+                            "Inbound first agent event",
+                            session_id=session.session_id,
+                            event_type=event.type.value if hasattr(event.type, "value") else str(event.type),
+                            ms_first_event=first_event_ms,
+                            ms_since_start=_ms_since_start(),
+                            ms_since_gw=_ms_since_gw(),
+                            perf_phase="be_first_event",
+                        )
+                    event_count += 1
                     await producer.publish_agent_event(
                         session_id=session.session_id,
                         user_id=inbound.user_id,
@@ -360,6 +489,16 @@ class InboundStreamWorker:
                         event=event,
                     )
                     if event.type == AgentEventType.TEXT_DELTA and event.content:
+                        if first_text_ms is None:
+                            first_text_ms = int((time.perf_counter() - t_run0) * 1000)
+                            logger.info(
+                                "Inbound first text.delta",
+                                session_id=session.session_id,
+                                ms_first_text=first_text_ms,
+                                ms_since_start=_ms_since_start(),
+                                ms_since_gw=_ms_since_gw(),
+                                perf_phase="be_first_text",
+                            )
                         response_parts.append(event.content)
                     elif event.type == AgentEventType.ERROR:
                         runtime_error: Any = event.message or "Agent runtime error"
@@ -369,6 +508,8 @@ class InboundStreamWorker:
                 session_id=session.session_id,
                 agent_id=resolved_agent_id,
                 timeout_sec=timeout_sec,
+                ms_since_start=_ms_since_start(),
+                perf_phase="be_timeout",
             )
             await self._publish_error(
                 producer,
@@ -384,6 +525,8 @@ class InboundStreamWorker:
                 session_id=session.session_id,
                 agent_id=resolved_agent_id,
                 error=str(exc),
+                ms_since_start=_ms_since_start(),
+                perf_phase="be_error",
                 exc_info=True,
             )
             await self._publish_error(
@@ -395,6 +538,7 @@ class InboundStreamWorker:
             )
             return
 
+        ms_agent_run: int = int((time.perf_counter() - t_run0) * 1000)
         response_text: str = "".join(response_parts)
         if response_text.strip():
             await session_manager.add_message(
@@ -410,10 +554,20 @@ class InboundStreamWorker:
             )
 
         logger.info(
-            "Inbound message processed",
+            "Inbound message processed (perf summary)",
             session_id=session.session_id,
             agent_id=resolved_agent_id,
             response_length=len(response_text),
+            event_count=event_count,
+            session_created=session_created,
+            ms_session=ms_session,
+            ms_ensure_agent=ms_ensure_agent,
+            ms_first_event=first_event_ms,
+            ms_first_text=first_text_ms,
+            ms_agent_run=ms_agent_run,
+            ms_total=_ms_since_start(),
+            ms_since_gw=_ms_since_gw(),
+            perf_phase="be_done",
         )
 
     async def _publish_error(

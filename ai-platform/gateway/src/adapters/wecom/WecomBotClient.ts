@@ -1,16 +1,18 @@
 /**
- * WecomBotClient.ts — 企业微信 Bot WebSocket 客户端
+ * WecomBotClient.ts — 企业微信智能机器人 WebSocket 长连接客户端
  *
- * 实现企业微信智能机器人 WebSocket 长连接：
- * - 长连接维持
- * - 心跳保活（30s 间隔）
- * - 自动重连（指数退避：1s → 2s → 4s → 8s → 16s → 30s 上限）
- * - 消息编解码（JSON 格式）
- * - 来源校验
+ * 按官方协议（文档 path/101463）实现：
+ * - 连接 wss://openws.work.weixin.qq.com
+ * - 握手后发送 aibot_subscribe（bot_id + secret）鉴权
+ * - 心跳：每 30s 发送 cmd=ping
+ * - 自动重连（指数退避）
+ * - 接收 aibot_msg_callback / aibot_event_callback
+ * - 主动推送 aibot_send_msg
  *
  * @module adapters/wecom/WecomBotClient
  */
 
+import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
 import { logger } from '../../middleware/logger.js';
 
@@ -20,10 +22,12 @@ import { logger } from '../../middleware/logger.js';
 
 /** Bot WebSocket 客户端配置 */
 export interface WecomBotClientConfig {
-  /** WebSocket 连接 URL */
+  /** 智能机器人 BotID */
+  botId: string;
+  /** 长连接专用 Secret */
+  secret: string;
+  /** WebSocket URL，默认官方 openws */
   wsUrl: string;
-  /** 鉴权 Token */
-  authToken: string;
   /** 心跳间隔（秒），默认 30 */
   heartbeatIntervalSec: number;
   /** 心跳超时：连续 N 次未响应触发重连，默认 3 */
@@ -36,27 +40,35 @@ export interface WecomBotClientConfig {
   maxReconnectDelayMs: number;
   /** 重连退避乘数，默认 2 */
   reconnectBackoffMultiplier: number;
+  /** 订阅鉴权超时（毫秒），默认 10000 */
+  subscribeTimeoutMs: number;
 }
 
 /** WebSocket 消息回调 */
 export type MessageCallback = (message: BotWsMessage) => void;
 
-/** Bot WebSocket 消息 */
+/** 标准化后的 Bot 入站消息（由 aibot_msg_callback 解析） */
 export interface BotWsMessage {
-  /** 消息类型 */
+  /** 协议 cmd，如 aibot_msg_callback */
+  cmd: string;
+  /** 回调 req_id（回复时需透传） */
+  reqId?: string;
+  /** 消息类型（body.msgtype） */
   msgType: string;
-  /** 消息 ID */
+  /** 消息 ID（body.msgid） */
   msgId?: string;
   /** 发送者 */
   from?: {
     userId: string;
     name?: string;
   };
-  /** 消息内容 */
+  /** 文本内容 */
   content?: string;
-  /** 消息时间戳 */
-  timestamp?: string;
-  /** 原始数据 */
+  /** 群聊 chatid */
+  chatId?: string;
+  /** single | group */
+  chatType?: string;
+  /** 原始完整帧 */
   raw: Record<string, unknown>;
 }
 
@@ -64,23 +76,34 @@ export interface BotWsMessage {
 export type ConnectionState =
   | 'disconnected'
   | 'connecting'
+  | 'subscribing'
   | 'connected'
   | 'heartbeating'
   | 'reconnecting';
+
+type PendingRequest = {
+  resolve: (value: Record<string, unknown>) => void;
+  reject: (error: Error) => void;
+  timer: NodeJS.Timeout;
+};
 
 // ============================================================================
 // 默认配置
 // ============================================================================
 
+const DEFAULT_WS_URL = 'wss://openws.work.weixin.qq.com';
+
 const DEFAULT_CONFIG: WecomBotClientConfig = {
-  wsUrl: '',
-  authToken: '',
+  botId: '',
+  secret: '',
+  wsUrl: DEFAULT_WS_URL,
   heartbeatIntervalSec: 30,
   heartbeatTimeoutCount: 3,
   maxReconnectAttempts: 10,
   initialReconnectDelayMs: 1000,
   maxReconnectDelayMs: 30000,
   reconnectBackoffMultiplier: 2,
+  subscribeTimeoutMs: 10000,
 };
 
 // ============================================================================
@@ -88,10 +111,7 @@ const DEFAULT_CONFIG: WecomBotClientConfig = {
 // ============================================================================
 
 /**
- * 企业微信 Bot WebSocket 客户端
- *
- * 维持与企业微信智能机器人平台的 WebSocket 长连接，
- * 负责消息收发、心跳保活和自动重连。
+ * 企业微信智能机器人 WebSocket 客户端
  */
 export class WecomBotClient {
   private readonly config: WecomBotClientConfig;
@@ -103,15 +123,18 @@ export class WecomBotClient {
   private missedHeartbeats = 0;
   private messageCallbacks: MessageCallback[] = [];
   private shouldRun = false;
+  private readonly pending = new Map<string, PendingRequest>();
 
-  constructor(config: Partial<WecomBotClientConfig> & { wsUrl: string; authToken: string }) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+  constructor(config: Partial<WecomBotClientConfig> & { botId: string; secret: string }) {
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config,
+      wsUrl: config.wsUrl?.trim() || DEFAULT_WS_URL,
+    };
   }
 
   /**
-   * 连接到企业微信 Bot WebSocket 服务
-   *
-   * @returns 连接成功 resolve，连接失败 reject
+   * 连接到企业微信并完成 aibot_subscribe 鉴权
    */
   async connect(): Promise<void> {
     if (this.state === 'connected' || this.state === 'heartbeating') {
@@ -119,37 +142,57 @@ export class WecomBotClient {
       return;
     }
 
+    if (!this.config.botId || !this.config.secret) {
+      throw new Error('WECOM_BOT_ID and WECOM_BOT_SECRET are required for long connection');
+    }
+
     this.shouldRun = true;
     this.state = 'connecting';
 
-    return new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       logger.info(
-        { wsUrl: this.config.wsUrl },
+        { wsUrl: this.config.wsUrl, botId: this.config.botId },
         'Connecting to Wecom Bot WebSocket',
       );
 
-      // 构造 WebSocket URL（带鉴权参数）
-      const url = `${this.config.wsUrl}?token=${encodeURIComponent(this.config.authToken)}`;
-
-      this.ws = new WebSocket(url, {
+      this.ws = new WebSocket(this.config.wsUrl, {
         handshakeTimeout: 10000,
       });
 
+      let settled = false;
+      const settleOk = (): void => {
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      };
+      const settleErr = (error: Error): void => {
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+      };
+
       this.ws.on('open', () => {
-        logger.info('Wecom Bot WebSocket connected');
-        this.state = 'connected';
-        this.reconnectAttempts = 0;
-        this.missedHeartbeats = 0;
-        this.startHeartbeat();
-        resolve();
+        void this.subscribe()
+          .then(() => {
+            this.state = 'connected';
+            this.reconnectAttempts = 0;
+            this.missedHeartbeats = 0;
+            this.startHeartbeat();
+            logger.info({ botId: this.config.botId }, 'Wecom Bot subscribed successfully');
+            settleOk();
+          })
+          .catch((error: unknown) => {
+            const err = error instanceof Error ? error : new Error(String(error));
+            logger.error({ error: err.message }, 'Wecom Bot subscribe failed');
+            settleErr(err);
+            this.handleDisconnect();
+          });
       });
 
       this.ws.on('message', (data: WebSocket.RawData) => {
         this.handleMessage(data);
-      });
-
-      this.ws.on('pong', () => {
-        this.missedHeartbeats = 0;
       });
 
       this.ws.on('close', (code: number, reason: Buffer) => {
@@ -157,26 +200,24 @@ export class WecomBotClient {
           { code, reason: reason.toString() },
           'Wecom Bot WebSocket closed',
         );
+        if (this.state === 'connecting' || this.state === 'subscribing') {
+          settleErr(new Error(`WebSocket closed during connect: ${code}`));
+        }
         this.handleDisconnect();
       });
 
       this.ws.on('error', (error: Error) => {
-        logger.error(
-          { error: error.message },
-          'Wecom Bot WebSocket error',
-        );
-        if (this.state === 'connecting') {
-          reject(error);
+        logger.error({ error: error.message }, 'Wecom Bot WebSocket error');
+        if (this.state === 'connecting' || this.state === 'subscribing') {
+          settleErr(error);
         }
         this.handleDisconnect();
       });
 
-      this.ws.on('unexpected-response', (_req, res) => {
+      this.ws.on('unexpected-response', (_req: unknown, res: { statusCode?: number }) => {
         const error = new Error(`Unexpected response: ${res.statusCode}`);
         logger.error({ statusCode: res.statusCode }, 'WebSocket unexpected response');
-        if (this.state === 'connecting') {
-          reject(error);
-        }
+        settleErr(error);
         this.handleDisconnect();
       });
     });
@@ -189,6 +230,7 @@ export class WecomBotClient {
     this.shouldRun = false;
     this.stopHeartbeat();
     this.clearReconnectTimer();
+    this.rejectAllPending(new Error('WebSocket disconnected'));
 
     if (this.ws != null) {
       if (this.ws.readyState === WebSocket.OPEN) {
@@ -203,9 +245,7 @@ export class WecomBotClient {
   }
 
   /**
-   * 发送消息到企业微信 Bot 平台
-   *
-   * @param message - 待发送的消息对象
+   * 发送原始协议帧
    */
   async send(message: Record<string, unknown>): Promise<void> {
     if (this.ws == null || this.ws.readyState !== WebSocket.OPEN) {
@@ -214,7 +254,7 @@ export class WecomBotClient {
 
     const data = JSON.stringify(message);
     return new Promise<void>((resolve, reject) => {
-      this.ws!.send(data, (error) => {
+      this.ws!.send(data, (error: Error | undefined) => {
         if (error != null) {
           logger.error(
             { error: error.message },
@@ -229,77 +269,104 @@ export class WecomBotClient {
   }
 
   /**
-   * 发送 template_card 消息
+   * 流式回复（aibot_respond_msg）— 用于「思考中...」与最终回复
    *
-   * @param cardType - 卡片类型
-   * @param cardData - 卡片数据
-   * @param target - 目标用户/群
+   * 必须透传消息回调中的 req_id；同一条流式消息共用 streamId。
+   */
+  async respondStream(params: {
+    reqId: string;
+    streamId: string;
+    content: string;
+    finish: boolean;
+  }): Promise<void> {
+    const frame = {
+      cmd: 'aibot_respond_msg',
+      headers: { req_id: params.reqId },
+      body: {
+        msgtype: 'stream',
+        stream: {
+          id: params.streamId,
+          finish: params.finish,
+          content: params.content,
+        },
+      },
+    };
+    await this.send(frame);
+    logger.info(
+      {
+        reqId: params.reqId,
+        streamId: params.streamId,
+        finish: params.finish,
+        contentLen: params.content.length,
+      },
+      'aibot_respond_msg stream sent',
+    );
+  }
+
+  /**
+   * 主动推送 template_card（aibot_send_msg）
    */
   async sendCard(
     cardType: string,
     cardData: Record<string, unknown>,
     target: { userId?: string; chatId?: string },
   ): Promise<void> {
-    const message = {
-      msgType: 'template_card',
-      cardType,
-      cardData,
-      target,
-      timestamp: new Date().toISOString(),
-    };
-    await this.send(message);
+    const chatid = target.chatId ?? target.userId;
+    if (chatid == null || chatid.length === 0) {
+      throw new Error('sendCard requires chatId or userId');
+    }
 
+    const chatType = target.chatId != null ? 2 : 1;
+    const reqId = randomUUID();
+    const frame = {
+      cmd: 'aibot_send_msg',
+      headers: { req_id: reqId },
+      body: {
+        chatid,
+        chat_type: chatType,
+        msgtype: 'template_card',
+        template_card: {
+          card_type: cardType,
+          ...cardData,
+        },
+      },
+    };
+
+    await this.send(frame);
     logger.info(
-      { cardType, target },
-      'template_card sent via Bot WebSocket',
+      { cardType, chatid, chatType, reqId },
+      'template_card sent via aibot_send_msg',
     );
   }
 
   /**
-   * 更新已发送的卡片（通过 responseCode）
-   *
-   * @param responseCode - 卡片响应码
-   * @param content - 更新内容
+   * 更新模板卡片（aibot_respond_update_msg）
    */
   async updateCard(
     responseCode: string,
     content: Record<string, unknown>,
   ): Promise<void> {
-    const message = {
-      msgType: 'update_template_card',
-      responseCode,
-      content,
-      timestamp: new Date().toISOString(),
-    };
-    await this.send(message);
+    const reqId = randomUUID();
+    await this.send({
+      cmd: 'aibot_respond_update_msg',
+      headers: { req_id: reqId },
+      body: {
+        response_code: responseCode,
+        ...content,
+      },
+    });
 
-    logger.info(
-      { responseCode },
-      'Card updated via Bot WebSocket',
-    );
+    logger.info({ responseCode, reqId }, 'Card updated via aibot_respond_update_msg');
   }
 
-  /**
-   * 注册消息回调
-   *
-   * @param callback - 消息回调函数
-   */
   onMessage(callback: MessageCallback): void {
     this.messageCallbacks.push(callback);
   }
 
-  /**
-   * 检查连接状态
-   * @returns 是否已连接
-   */
   isConnected(): boolean {
     return this.state === 'connected' || this.state === 'heartbeating';
   }
 
-  /**
-   * 获取当前连接状态
-   * @returns 连接状态
-   */
   getState(): ConnectionState {
     return this.state;
   }
@@ -308,16 +375,36 @@ export class WecomBotClient {
   // 私有方法
   // ========================================================================
 
-  /**
-   * 启动心跳定时器
-   */
+  private async subscribe(): Promise<void> {
+    this.state = 'subscribing';
+    const reqId = randomUUID();
+    const frame = {
+      cmd: 'aibot_subscribe',
+      headers: { req_id: reqId },
+      body: {
+        bot_id: this.config.botId,
+        secret: this.config.secret,
+      },
+    };
+
+    const responsePromise = this.waitForResponse(reqId, this.config.subscribeTimeoutMs);
+    await this.send(frame);
+    const response = await responsePromise;
+    const errcode = Number(response['errcode'] ?? -1);
+    if (errcode !== 0) {
+      throw new Error(
+        `aibot_subscribe failed: errcode=${errcode}, errmsg=${String(response['errmsg'] ?? '')}`,
+      );
+    }
+  }
+
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.state = 'heartbeating';
 
     const intervalMs = this.config.heartbeatIntervalSec * 1000;
     this.heartbeatTimer = setInterval(() => {
-      this.sendHeartbeat();
+      void this.sendHeartbeat();
     }, intervalMs);
 
     logger.debug(
@@ -326,9 +413,6 @@ export class WecomBotClient {
     );
   }
 
-  /**
-   * 停止心跳定时器
-   */
   private stopHeartbeat(): void {
     if (this.heartbeatTimer != null) {
       clearInterval(this.heartbeatTimer);
@@ -336,16 +420,12 @@ export class WecomBotClient {
     }
   }
 
-  /**
-   * 发送心跳
-   */
-  private sendHeartbeat(): void {
+  private async sendHeartbeat(): Promise<void> {
     if (this.ws == null || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
 
     this.missedHeartbeats++;
-
     if (this.missedHeartbeats >= this.config.heartbeatTimeoutCount) {
       logger.warn(
         { missedHeartbeats: this.missedHeartbeats },
@@ -355,77 +435,63 @@ export class WecomBotClient {
       return;
     }
 
-    // 发送 ping
-    this.ws.ping();
-
-    // 也可以发送业务心跳消息
-    const heartbeatMsg = {
-      msgType: 'heartbeat',
-      timestamp: new Date().toISOString(),
-    };
-    this.ws.send(JSON.stringify(heartbeatMsg), (error) => {
-      if (error != null) {
-        logger.warn(
-          { error: error.message },
-          'Heartbeat send failed',
-        );
+    const reqId = randomUUID();
+    try {
+      const responsePromise = this.waitForResponse(reqId, this.config.subscribeTimeoutMs);
+      await this.send({
+        cmd: 'ping',
+        headers: { req_id: reqId },
+      });
+      const response = await responsePromise;
+      if (Number(response['errcode'] ?? -1) === 0) {
+        this.missedHeartbeats = 0;
       }
-    });
-
-    logger.debug(
-      { missedHeartbeats: this.missedHeartbeats },
-      'Heartbeat sent',
-    );
+      logger.debug({ missedHeartbeats: this.missedHeartbeats, reqId }, 'Heartbeat ping ok');
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        'Heartbeat ping failed',
+      );
+    }
   }
 
-  /**
-   * 处理接收到的消息
-   */
   private handleMessage(data: WebSocket.RawData): void {
     try {
       const raw = JSON.parse(data.toString()) as Record<string, unknown>;
+      const headers = (raw['headers'] as Record<string, unknown> | undefined) ?? {};
+      const reqId = typeof headers['req_id'] === 'string' ? headers['req_id'] : undefined;
 
-      // 心跳响应
-      if (raw['msgType'] === 'heartbeat_ack' || raw['msgType'] === 'pong') {
+      // 订阅 / ping / send 的响应帧（带 errcode）
+      if (reqId != null && this.pending.has(reqId) && raw['errcode'] != null) {
+        this.resolvePending(reqId, raw);
+        return;
+      }
+
+      const cmd = typeof raw['cmd'] === 'string' ? raw['cmd'] : '';
+
+      // 心跳响应偶发无 errcode 匹配时也清零
+      if (cmd === 'pong' || (reqId != null && this.pending.has(reqId) && cmd === '')) {
+        if (reqId != null && this.pending.has(reqId)) {
+          this.resolvePending(reqId, raw);
+        }
         this.missedHeartbeats = 0;
         return;
       }
 
-      // 构造标准消息
-      const message: BotWsMessage = {
-        msgType: (raw['msgType'] as string) ?? 'unknown',
-        ...(raw['msgId'] != null ? { msgId: raw['msgId'] as string } : {}),
-        ...(raw['from'] != null ? { from: raw['from'] as { userId: string; name?: string } } : {}),
-        ...(raw['content'] != null ? { content: raw['content'] as string } : {}),
-        ...(raw['timestamp'] != null ? { timestamp: raw['timestamp'] as string } : {}),
-        raw,
-      };
-
-      // 验证消息来源
-      if (!this.verifyMessageSource(raw)) {
-        logger.warn(
-          { msgType: message.msgType },
-          'Message source verification failed, ignoring',
-        );
+      if (cmd === 'aibot_msg_callback' || cmd === 'aibot_event_callback') {
+        const message = this.parseCallback(raw, cmd, reqId);
+        this.dispatchMessage(message);
         return;
       }
 
-      logger.debug(
-        { msgType: message.msgType, from: message.from?.userId },
-        'Bot message received',
-      );
-
-      // 触发回调
-      for (const callback of this.messageCallbacks) {
-        try {
-          callback(message);
-        } catch (error) {
-          logger.error(
-            { error: error instanceof Error ? error.message : String(error) },
-            'Error in message callback',
-          );
-        }
+      // 兼容旧字段或未知帧：尽量解析后下发
+      if (raw['msgType'] != null || raw['body'] != null) {
+        const message = this.parseCallback(raw, cmd || 'unknown', reqId);
+        this.dispatchMessage(message);
+        return;
       }
+
+      logger.debug({ cmd, keys: Object.keys(raw) }, 'Ignored Bot WebSocket frame');
     } catch (error) {
       logger.error(
         { error: error instanceof Error ? error.message : String(error) },
@@ -434,33 +500,96 @@ export class WecomBotClient {
     }
   }
 
-  /**
-   * 验证消息来源
-   */
-  private verifyMessageSource(raw: Record<string, unknown>): boolean {
-    // 检查是否有必要的来源字段
-    if (raw['msgType'] == null) {
-      return false;
-    }
+  private parseCallback(
+    raw: Record<string, unknown>,
+    cmd: string,
+    reqId?: string,
+  ): BotWsMessage {
+    const body = (raw['body'] as Record<string, unknown> | undefined) ?? {};
+    const fromRaw = body['from'] as Record<string, unknown> | undefined;
+    const textRaw = body['text'] as Record<string, unknown> | undefined;
+    const userId =
+      (typeof fromRaw?.['userid'] === 'string' ? fromRaw['userid'] : undefined) ??
+      (typeof fromRaw?.['userId'] === 'string' ? fromRaw['userId'] : undefined);
 
-    // 心跳消息不需要来源验证
-    if (raw['msgType'] === 'heartbeat' || raw['msgType'] === 'heartbeat_ack') {
-      return true;
-    }
+    const content =
+      (typeof textRaw?.['content'] === 'string' ? textRaw['content'] : undefined) ??
+      (typeof body['content'] === 'string' ? body['content'] : undefined) ??
+      (typeof raw['content'] === 'string' ? raw['content'] : undefined);
 
-    // 检查是否有 from 字段（用户消息需要）
-    if (raw['content'] != null && raw['from'] == null) {
-      return false;
-    }
+    const msgType =
+      (typeof body['msgtype'] === 'string' ? body['msgtype'] : undefined) ??
+      (typeof raw['msgType'] === 'string' ? raw['msgType'] : undefined) ??
+      'unknown';
 
-    return true;
+    return {
+      cmd,
+      ...(reqId != null ? { reqId } : {}),
+      msgType,
+      ...(typeof body['msgid'] === 'string' ? { msgId: body['msgid'] } : {}),
+      ...(userId != null ? { from: { userId } } : {}),
+      ...(content != null ? { content } : {}),
+      ...(typeof body['chatid'] === 'string' ? { chatId: body['chatid'] } : {}),
+      ...(typeof body['chattype'] === 'string' ? { chatType: body['chattype'] } : {}),
+      raw,
+    };
   }
 
-  /**
-   * 处理断连
-   */
+  private dispatchMessage(message: BotWsMessage): void {
+    logger.debug(
+      {
+        cmd: message.cmd,
+        msgType: message.msgType,
+        from: message.from?.userId,
+        chatId: message.chatId,
+      },
+      'Bot message received',
+    );
+
+    for (const callback of this.messageCallbacks) {
+      try {
+        callback(message);
+      } catch (error) {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          'Error in message callback',
+        );
+      }
+    }
+  }
+
+  private waitForResponse(reqId: string, timeoutMs: number): Promise<Record<string, unknown>> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(reqId);
+        reject(new Error(`Timed out waiting for req_id=${reqId}`));
+      }, timeoutMs);
+
+      this.pending.set(reqId, { resolve, reject, timer });
+    });
+  }
+
+  private resolvePending(reqId: string, value: Record<string, unknown>): void {
+    const pending = this.pending.get(reqId);
+    if (pending == null) {
+      return;
+    }
+    clearTimeout(pending.timer);
+    this.pending.delete(reqId);
+    pending.resolve(value);
+  }
+
+  private rejectAllPending(error: Error): void {
+    for (const [reqId, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+      this.pending.delete(reqId);
+    }
+  }
+
   private handleDisconnect(): void {
     this.stopHeartbeat();
+    this.rejectAllPending(new Error('WebSocket disconnected'));
 
     if (this.ws != null) {
       this.ws.removeAllListeners();
@@ -472,13 +601,9 @@ export class WecomBotClient {
       return;
     }
 
-    // 尝试重连
     this.scheduleReconnect();
   }
 
-  /**
-   * 安排重连
-   */
   private scheduleReconnect(): void {
     this.clearReconnectTimer();
 
@@ -493,7 +618,6 @@ export class WecomBotClient {
 
     this.state = 'reconnecting';
 
-    // 计算指数退避延迟
     const delay = Math.min(
       this.config.initialReconnectDelayMs *
         Math.pow(this.config.reconnectBackoffMultiplier, this.reconnectAttempts),
@@ -518,9 +642,6 @@ export class WecomBotClient {
     }, delay);
   }
 
-  /**
-   * 清除重连定时器
-   */
   private clearReconnectTimer(): void {
     if (this.reconnectTimer != null) {
       clearTimeout(this.reconnectTimer);

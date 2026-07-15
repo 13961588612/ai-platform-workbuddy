@@ -244,6 +244,8 @@ export class MessageRouter {
     sessionId?: string;
     agentId?: string;
     traceId?: string;
+    userMobile?: string;
+    channelUserId?: string;
     metadata?: Record<string, unknown>;
   }): InboundMessage {
     // 生成 session_id（如果未提供）
@@ -259,6 +261,10 @@ export class MessageRouter {
       id: randomUUID(),
       sessionId,
       userId: params.userId,
+      ...(params.userMobile != null && params.userMobile.length > 0
+        ? { userMobile: params.userMobile }
+        : {}),
+      channelUserId: params.channelUserId ?? params.userId,
       channel: params.channel,
       ...(params.agentId != null ? { agentId: params.agentId } : {}),
       content: params.content,

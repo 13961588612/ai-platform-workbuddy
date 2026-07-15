@@ -3,9 +3,8 @@
  *
  * 实现 Bot 渠道协议适配：
  * - WebSocket 长连接消息收发
- * - template_card 发送与更新
- * - AgentEvent → template_card 映射（委托 EventTransformer/BotEventMapper）
- * - 会话上下文管理
+ * - 收到用户消息后立即 aibot_respond_msg「思考中...」
+ * - Agent 完成后用同一 stream 推送最终回复
  *
  * @module adapters/wecom/WecomBotAdapter
  */
@@ -18,40 +17,38 @@ import { WecomBotCardBuilder, type TemplateCard } from './WecomBotCardBuilder.js
 import type { InboundMessage } from '../../queue/redisStream.js';
 import { logger } from '../../middleware/logger.js';
 
-// ============================================================================
-// 类型定义
-// ============================================================================
-
 /** 企业微信 Bot 适配器配置 */
 export interface WecomBotAdapterConfig extends WecomBotClientConfig {
-  /** 卡片来源名称 */
   sourceName: string;
-  /** 卡片来源图标 URL */
   sourceIconUrl?: string;
 }
 
-// ============================================================================
-// WecomBotAdapter
-// ============================================================================
+/** 进行中的流式回复上下文 */
+interface PendingStream {
+  reqId: string;
+  streamId: string;
+  buffer: string;
+  /** Gateway 收到企微回调的时间戳（ms） */
+  t0: number;
+  /** 首次 text.delta 时间 */
+  firstDeltaAt?: number;
+  /** 上次推送到企微的时间（用于节流） */
+  lastFlushAt: number;
+  /** 推送到企微的次数（不含思考中） */
+  flushCount: number;
+}
+
+const STREAM_FLUSH_INTERVAL_MS = 400;
 
 /**
  * 企业微信智能机器人适配器
- *
- * 实现 ChannelAdapter 接口，负责企业微信 Bot 渠道的消息收发。
- *
- * 能力：流式输出 ❌（需缓冲） | 自定义 UI ❌（仅卡片） | Markdown LIMITED | 消息长度 2048
- *
- * 消息流程：
- * 1. 接收 WebSocket 消息 → 解析为 InboundMessage
- * 2. 路由到 MessageRouter → Agent Core 处理
- * 3. 接收 AgentEvent 流 → EventTransformer 降级 → template_card
- * 4. 通过 WecomBotClient 发送 template_card
  */
 export class WecomBotAdapter {
   private readonly wsClient: WecomBotClient;
   private readonly cardBuilder: WecomBotCardBuilder;
   private readonly capability: WecomBotCapability;
   private readonly sourceName: string;
+  private readonly pendingBySession = new Map<string, PendingStream>();
 
   constructor(config: WecomBotAdapterConfig) {
     this.wsClient = new WecomBotClient(config);
@@ -63,113 +60,303 @@ export class WecomBotAdapter {
     this.sourceName = config.sourceName;
   }
 
-  /**
-   * 获取渠道能力声明
-   * @returns 渠道能力
-   */
   getCapability(): ChannelCapability {
     return this.capability;
   }
 
   /**
-   * 启动 Bot 适配器
-   *
-   * 连接企业微信 Bot WebSocket 服务，注册消息回调。
-   *
-   * @param onMessage - 消息回调（将入站消息传递给 MessageRouter）
+   * 启动 Bot：连接后注册回调。
+   * 文本消息会先回「思考中...」，再交给 MessageRouter。
    */
-  async start(onMessage: (message: InboundMessage) => void): Promise<void> {
+  async start(onMessage: (message: InboundMessage) => void | Promise<void>): Promise<void> {
     await this.wsClient.connect();
 
-    // 注册消息回调
     this.wsClient.onMessage((botMessage: BotWsMessage) => {
-      const inbound = this.receive(botMessage);
-      onMessage(inbound);
+      logger.info({ botMessage }, 'Wecom Bot raw botMessage');
+      void this.handleInbound(botMessage, onMessage);
     });
 
-    logger.info(
-      { sourceName: this.sourceName },
-      'WecomBotAdapter started',
-    );
+    logger.info({ sourceName: this.sourceName }, 'WecomBotAdapter started');
   }
 
-  /**
-   * 停止 Bot 适配器
-   */
   stop(): void {
     this.wsClient.disconnect();
+    this.pendingBySession.clear();
     logger.info('WecomBotAdapter stopped');
   }
 
   /**
-   * 接收原始 Bot 消息，解析为标准入站消息
-   *
-   * @param botMessage - Bot WebSocket 消息
-   * @returns 标准入站消息
+   * 处理入站帧：打日志、过滤事件、立即回「思考中...」、再路由
    */
-  receive(botMessage: BotWsMessage): InboundMessage {
-    const userId = botMessage.from?.userId ?? 'unknown';
-    const content = botMessage.content ?? '';
+  private async handleInbound(
+    botMessage: BotWsMessage,
+    onMessage: (message: InboundMessage) => void | Promise<void>,
+  ): Promise<void> {
+    const t0 = Date.now();
+    logger.info(
+      {
+        cmd: botMessage.cmd,
+        msgType: botMessage.msgType,
+        from: botMessage.from?.userId,
+        chatId: botMessage.chatId,
+        chatType: botMessage.chatType,
+        reqId: botMessage.reqId,
+        contentPreview: (botMessage.content ?? '').slice(0, 80),
+        perfPhase: 'gw_recv',
+      },
+      'Wecom Bot inbound message',
+    );
 
-    // 生成 session_id（wecom-bot-{uuid}）
-    const sessionId = `wecom-bot-${randomUUID()}`;
+    // 进入会话等事件：不走 Agent（无正文）
+    if (botMessage.cmd === 'aibot_event_callback') {
+      logger.info({ msgType: botMessage.msgType }, 'Skip wecom event callback (no agent)');
+      return;
+    }
+
+    if (botMessage.cmd !== 'aibot_msg_callback') {
+      logger.info({ cmd: botMessage.cmd }, 'Skip non-msg wecom frame');
+      return;
+    }
+
+    const content = (botMessage.content ?? '').trim();
+    if (content.length === 0) {
+      logger.info('Skip empty wecom text message');
+      return;
+    }
+
+    if (botMessage.reqId == null || botMessage.reqId.length === 0) {
+      logger.warn('Wecom msg_callback missing req_id, cannot stream reply');
+      return;
+    }
+
+    const inbound = this.receive(botMessage, t0);
+    const streamId = randomUUID();
+    this.pendingBySession.set(inbound.sessionId, {
+      reqId: botMessage.reqId,
+      streamId,
+      buffer: '',
+      t0,
+      lastFlushAt: 0,
+      flushCount: 0,
+    });
+
+    const tThinking0 = Date.now();
+    try {
+      await this.wsClient.respondStream({
+        reqId: botMessage.reqId,
+        streamId,
+        content: '思考中...',
+        finish: false,
+      });
+      logger.info(
+        {
+          sessionId: inbound.sessionId,
+          streamId,
+          msThinking: Date.now() - tThinking0,
+          msSinceRecv: Date.now() - t0,
+          perfPhase: 'gw_thinking',
+        },
+        'Wecom Bot replied 思考中...',
+      );
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        'Failed to send 思考中... stream',
+      );
+    }
+
+    const tRoute0 = Date.now();
+    try {
+      await onMessage(inbound);
+      logger.info(
+        {
+          sessionId: inbound.sessionId,
+          traceId: inbound.traceId,
+          msRoute: Date.now() - tRoute0,
+          msSinceRecv: Date.now() - t0,
+          perfPhase: 'gw_route',
+        },
+        'Wecom Bot routed to Redis',
+      );
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        'Failed to route wecom inbound message',
+      );
+      await this.finishWithError(inbound.sessionId, '消息处理失败，请稍后重试');
+    }
+  }
+
+  receive(botMessage: BotWsMessage, t0: number = Date.now()): InboundMessage {
+    const channelUserId = botMessage.from?.userId ?? 'unknown';
+    const content = botMessage.content ?? '';
+    const sessionKey =
+      botMessage.chatType === 'group' && botMessage.chatId != null
+        ? botMessage.chatId
+        : channelUserId;
+    const sessionId = `wecom-bot-${sessionKey}`;
+
+    // 企微回调偶发带手机号字段；没有则为空
+    const rawBody =
+      (botMessage.raw['body'] as Record<string, unknown> | undefined) ?? {};
+    const rawFrom =
+      (rawBody['from'] as Record<string, unknown> | undefined) ??
+      (botMessage.raw['from'] as Record<string, unknown> | undefined) ??
+      {};
+    const userMobile =
+      (typeof rawFrom['mobile'] === 'string' ? rawFrom['mobile'] : undefined) ??
+      (typeof rawBody['mobile'] === 'string' ? rawBody['mobile'] : undefined) ??
+      '';
 
     return {
       id: botMessage.msgId ?? randomUUID(),
       sessionId,
-      userId,
+      // 暂无平台用户映射时，userId 先沿用渠道 userid
+      userId: channelUserId,    // 平台侧统一用户标识
+      channelUserId,
+      ...(userMobile.length > 0 ? { userMobile } : {}),
+      
       channel: 'wecom-bot',
       content,
       messageType: 'text',
       traceId: randomUUID(),
-      timestamp: botMessage.timestamp ?? new Date().toISOString(),
+      timestamp: new Date().toISOString(),
       metadata: {
+        botCmd: botMessage.cmd,
         botMsgType: botMessage.msgType,
+        botReqId: botMessage.reqId,
+        chatId: botMessage.chatId,
+        chatType: botMessage.chatType,
         from: botMessage.from,
         raw: botMessage.raw,
+        perfT0: t0,
       },
     };
   }
 
-  /**
-   * 发送 AgentEvent 到 Bot 渠道
-   *
-   * Bot 渠道不支持流式输出和自定义 UI，
-   * AgentEvent 需要通过 EventTransformer 降级为 template_card 后发送。
-   *
-   * 注意：此方法接收已转换的 template_card，实际转换由 EventTransformer 完成。
-   *
-   * @param card - template_card 消息
-   * @param target - 目标用户
-   */
+  /** Agent text.delta：累积；节流推送到企微（默认 400ms） */
+  async onAgentTextDelta(sessionId: string, delta: string): Promise<void> {
+    const pending = this.pendingBySession.get(sessionId);
+    if (pending == null) {
+      return;
+    }
+    pending.buffer += delta;
+    if (pending.firstDeltaAt == null) {
+      pending.firstDeltaAt = Date.now();
+      logger.info(
+        {
+          sessionId,
+          msSinceRecv: pending.firstDeltaAt - pending.t0,
+          perfPhase: 'gw_first_delta',
+        },
+        'Wecom Bot first text.delta',
+      );
+    }
+
+    const now = Date.now();
+    if (
+      pending.buffer.trim().length > 0 &&
+      now - pending.lastFlushAt >= STREAM_FLUSH_INTERVAL_MS
+    ) {
+      const tFlush0 = Date.now();
+      await this.wsClient.respondStream({
+        reqId: pending.reqId,
+        streamId: pending.streamId,
+        content: pending.buffer,
+        finish: false,
+      });
+      pending.lastFlushAt = now;
+      pending.flushCount += 1;
+      logger.debug(
+        {
+          sessionId,
+          flushCount: pending.flushCount,
+          msFlush: Date.now() - tFlush0,
+          contentLen: pending.buffer.length,
+          perfPhase: 'gw_stream_flush',
+        },
+        'Wecom Bot stream flushed',
+      );
+    }
+  }
+
+  /** Agent 出错：结束流式消息 */
+  async onAgentError(sessionId: string, message: string): Promise<void> {
+    await this.finishWithError(sessionId, message || '处理出错');
+  }
+
+  /** Agent done：结束流式消息 */
+  async onAgentDone(sessionId: string): Promise<void> {
+    const pending = this.pendingBySession.get(sessionId);
+    if (pending == null) {
+      return;
+    }
+    const content =
+      pending.buffer.trim().length > 0 ? pending.buffer : '（无回复内容）';
+    const tFinish0 = Date.now();
+    try {
+      await this.wsClient.respondStream({
+        reqId: pending.reqId,
+        streamId: pending.streamId,
+        content,
+        finish: true,
+      });
+      const now = Date.now();
+      logger.info(
+        {
+          sessionId,
+          contentLen: content.length,
+          flushCount: pending.flushCount,
+          msFinishSend: now - tFinish0,
+          msFirstDelta: pending.firstDeltaAt != null ? pending.firstDeltaAt - pending.t0 : null,
+          msTotal: now - pending.t0,
+          perfPhase: 'gw_done',
+        },
+        'Wecom Bot stream finished (perf summary)',
+      );
+    } finally {
+      this.pendingBySession.delete(sessionId);
+    }
+  }
+
+  private async finishWithError(sessionId: string, message: string): Promise<void> {
+    const pending = this.pendingBySession.get(sessionId);
+    if (pending == null) {
+      return;
+    }
+    try {
+      await this.wsClient.respondStream({
+        reqId: pending.reqId,
+        streamId: pending.streamId,
+        content: `⚠️ ${message}`,
+        finish: true,
+      });
+      logger.info(
+        {
+          sessionId,
+          msTotal: Date.now() - pending.t0,
+          perfPhase: 'gw_error_done',
+        },
+        'Wecom Bot stream finished with error',
+      );
+    } finally {
+      this.pendingBySession.delete(sessionId);
+    }
+  }
+
   async sendCard(
     card: TemplateCard,
     target: { userId?: string; chatId?: string },
   ): Promise<void> {
     await this.wsClient.sendCard(card.card_type, card.data, target);
-
-    logger.info(
-      {
-        cardType: card.card_type,
-        target,
-      },
-      'template_card sent to Bot',
-    );
+    logger.info({ cardType: card.card_type, target }, 'template_card sent to Bot');
   }
 
-  /**
-   * 发送 AgentEvent（统一接口，内部转换为卡片）
-   *
-   * @param event - Agent 事件
-   * @param target - 目标用户
-   * @param transformFn - 事件转换函数（由 EventTransformer 提供）
-   */
   async send(
     event: AgentEvent,
     target: { userId?: string; chatId?: string },
     transformFn?: (event: AgentEvent) => TemplateCard | null,
   ): Promise<void> {
-    // 如果提供了转换函数，先转换
     if (transformFn != null) {
       const card = transformFn(event);
       if (card != null) {
@@ -178,7 +365,6 @@ export class WecomBotAdapter {
       }
     }
 
-    // 无转换函数时，直接构建 text_notice（降级处理）
     if (event.type === 'text.delta' && event.content != null) {
       const card = this.cardBuilder.buildTextNotice('AI助手回复', event.content, {});
       await this.sendCard(card, target);
@@ -195,19 +381,9 @@ export class WecomBotAdapter {
       return;
     }
 
-    // 其他事件类型不做处理（由 EventTransformer 统一转换）
-    logger.debug(
-      { eventType: event.type },
-      'Event skipped (no card generated)',
-    );
+    logger.debug({ eventType: event.type }, 'Event skipped (no card generated)');
   }
 
-  /**
-   * 更新已发送的卡片
-   *
-   * @param responseCode - 卡片响应码
-   * @param content - 更新内容
-   */
   async updateCard(
     responseCode: string,
     content: Record<string, unknown>,
@@ -215,26 +391,14 @@ export class WecomBotAdapter {
     await this.wsClient.updateCard(responseCode, content);
   }
 
-  /**
-   * 获取 WebSocket 客户端实例
-   * @returns WebSocket 客户端
-   */
   getWsClient(): WecomBotClient {
     return this.wsClient;
   }
 
-  /**
-   * 获取卡片构建器实例
-   * @returns 卡片构建器
-   */
   getCardBuilder(): WecomBotCardBuilder {
     return this.cardBuilder;
   }
 
-  /**
-   * 检查连接状态
-   * @returns 是否已连接
-   */
   isConnected(): boolean {
     return this.wsClient.isConnected();
   }

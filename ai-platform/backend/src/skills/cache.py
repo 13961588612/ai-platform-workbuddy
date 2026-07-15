@@ -2,12 +2,12 @@
 HotSkillCache — 基于 Redis 的 Skill 元数据和查询结果缓存。
 
 三层缓存：
-1. 查询结果缓存：``query_hash → Top-50 SkillScores``（TTL 300s）
-2. 热门 Skill 元数据缓存：``skill:{id} → Skill JSON``（TTL 3600s）
-3. Schema 缓存：``skill_schema:{id} → JSON Schema``（TTL 1800s）
+1. 查询结果缓存：``query_hash → Top-50 SkillScores``（TTL = SKILLS_CACHE_TTL）
+2. 热门 Skill 元数据缓存：``skill:{id} → Skill JSON``（TTL = SKILLS_META_CACHE_TTL）
+3. Schema 缓存：``skill_schema:{id} → JSON Schema``（TTL = SKILLS_SCHEMA_CACHE_TTL）
 
-热门 Skill 通过 Redis Sorted Set ``skill:freq`` 追踪
-调用频率来识别；Top-50 会被预热到元数据缓存中。
+热门 Skill 通过 Redis Sorted Set（键名 = SKILLS_FREQ_KEY）追踪
+调用频率来识别；Top-N（SKILLS_WARMUP_TOP_N）会被预热到元数据缓存中。
 """
 
 from __future__ import annotations
@@ -42,11 +42,11 @@ class HotSkillCache:
             max_connections=self._settings.REDIS_MAX_CONNECTIONS,
             decode_responses=True,
         )
-        self._query_ttl = self._settings.SKILLS_CACHE_TTL
-        self._meta_ttl = 3600
-        self._schema_ttl = 1800
-        self._freq_key = "skill:freq"
-        self._warmup_threshold = 50
+        self._query_ttl: int = self._settings.SKILLS_CACHE_TTL
+        self._meta_ttl: int = self._settings.SKILLS_META_CACHE_TTL
+        self._schema_ttl: int = self._settings.SKILLS_SCHEMA_CACHE_TTL
+        self._freq_key: str = self._settings.SKILLS_FREQ_KEY
+        self._warmup_threshold: int = self._settings.SKILLS_WARMUP_TOP_N
 
     # ---- 查询结果缓存 ----
 
@@ -167,10 +167,11 @@ class HotSkillCache:
         """递增 *skill_id* 的调用频率计数器。"""
         await self._redis.zincrby(self._freq_key, 1, skill_id)
 
-    async def get_hot_skills(self, top_n: int = 50) -> list[str]:
+    async def get_hot_skills(self, top_n: int | None = None) -> list[str]:
         """返回调用最频繁的 *top_n* 个 Skill ID。"""
+        limit: int = self._warmup_threshold if top_n is None else top_n
         # ZREVRANGE 返回最高分排在最前
-        return await self._redis.zrevrange(self._freq_key, 0, top_n - 1)
+        return await self._redis.zrevrange(self._freq_key, 0, limit - 1)
 
     async def warmup(self, skills: list[Skill]) -> int:
         """将热门 Skill 的元数据预加载到缓存中。

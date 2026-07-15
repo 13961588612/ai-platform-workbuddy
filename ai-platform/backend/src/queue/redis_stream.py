@@ -47,6 +47,8 @@ class InboundStreamMessage:
     timestamp: str
     agent_id: str | None = None
     metadata: dict[str, Any] | None = None
+    user_mobile: str | None = None
+    channel_user_id: str | None = None
 
 
 class StreamKeys:
@@ -86,6 +88,8 @@ def parse_inbound_fields(fields: dict[str, str]) -> InboundStreamMessage:
     """将 Redis Stream 字段解析为 InboundStreamMessage。"""
     metadata_raw: str | None = fields.get("metadata")
     metadata: Any = json.loads(metadata_raw) if metadata_raw else None
+    user_mobile: str | None = fields.get("userMobile") or None
+    channel_user_id: str | None = fields.get("channelUserId") or None
     return InboundStreamMessage(
         id=fields.get("id", ""),
         session_id=fields.get("sessionId", ""),
@@ -97,6 +101,8 @@ def parse_inbound_fields(fields: dict[str, str]) -> InboundStreamMessage:
         timestamp=fields.get("timestamp", ""),
         agent_id=fields.get("agentId"),
         metadata=metadata,
+        user_mobile=user_mobile,
+        channel_user_id=channel_user_id,
     )
 
 

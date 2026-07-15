@@ -88,15 +88,17 @@ export class EventTransformer {
    * @returns 转换后的渠道消息
    */
   transform(event: AgentEvent, channel: ChannelType): ChannelMessage {
+    // Bot 渠道统一走卡片/缓冲降级，避免 canRender=true 时误走 H5 透传（无 card 导致不回消息）
+    if (channel === 'wecom-bot') {
+      return this.toBotCard(event);
+    }
+
     const capability = this.capabilityRegistry.getCapability(channel);
 
-    // 检查渠道是否能直接渲染该事件
     if (capability.canRender(event.type)) {
-      // 渠道原生支持，透传
       return this.toH5Event(event, channel);
     }
 
-    // 渠道不支持，执行降级
     return this.degradeByCapability(event, capability);
   }
 
